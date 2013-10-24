@@ -2,55 +2,85 @@
 
 var slicer = Array.prototype.slice
 
-function Break() { return Break }
-function Skip() { return Skip }
+function Meta(value) {
+  return this.value = value
+}
+Meta.prototype.valueOf = function() {
+  return this.value
+}
+
+var Break = new Meta(null)
+var Skip = new Meta(null)
+
+function Return(value) {
+  if (!(this instanceof Return))
+    return new Return(value)
+
+  this.value = value
+}
+Return.prototype = new Meta()
+
 
 function Signal(generator, initial) {
-  var input = this
+  if (!(this instanceof Signal))
+    return new Signal(generator, initial)
 
-  input.value = initial
-  input.generate = generator
-
-  input.receive = function receive(value) {
-    // If `input.dispatch` is set to `null`, then input was already
-    // paused so result is a `Break` message. Otherwise result is
-    // value returned by dispatch.
-    var result = input.send ? input.send(input.value = value, input) : Break
-    if (result === Break) input.send = null
-
-    return result
-  }
+  this.value = initial
+  this.generate = generator
 }
+Signal.Return = Return
+Signal.return = Return
 Signal.Skip = Skip
 Signal.Break = Break
 
-// Method dispatches `value` to an every `customers` of `this` signal.
-// This method is only used if `this` signal has multiple customers.
-Signal.prototype.dispatch = function dispatch(value) {
-  var customers = this.customers
-  var count = customers.length
-  var index = 0
 
-  // Dispatch updated signal `value` to an every customer of this `signal`.
-  while (index < count) {
-    var customer = customers[index]
+function dispatch(signal) {
+  return function dispatch(value) {
+    var result = void(0)
+    // Optimal case with a single receiver.
+    if (signal.receive) {
 
-    // If customer wishes to unsubscribe from updates
-    // remove it from the set.
-    if (customer(value, this) === Break)
-      customers.splice(index, 1)
-    // Otherwise increment index, to send value to a
-    // next customer.
-    else
-      index = index + 1
+      result = signal.receive(signal.value = value, signal)
+      if (result === Break) signal.receive = null
+    }
+    // If multiple receivers are subscribed dispatches `value` to eoch one.
+    else if (signal.receivers) {
+      var receivers = signal.receivers
+      var count = receivers.length
+      var index = 0
+
+      // Dispatch updated signal `value` to an every customer of this `signal`.
+      while (index < count) {
+        var receive = receivers[index]
+
+        // If customer wishes to unsubscribe from updates
+        // remove it from the set.
+        if (receive(value, signal) === Break) {
+          receivers.splice(index, 1)
+          count = count - 1
+        }
+        // Otherwise increment index, to send value to a
+        // next customer.
+        else {
+          index = index + 1
+        }
+      }
+      // If no more receivers `Break` the generator.
+      result = receivers.length ? void(0) : Break
+    }
+    else {
+      result = Break
+    }
+    return result
   }
-
-  // If no more customers `Break` the generator.
-  return consumers.length ? void(0) : Break
 }
 // Internal field used for holding set of customers
 // when `.dispatch` is used for sending values.
-Signal.prototype.customers = null
+Signal.prototype.receivers = null
+Signal.prototype.receive = null
+Signal.prototype.valueOf = function() {
+  return this.value
+}
 
 exports.Signal = Signal
 
@@ -59,16 +89,26 @@ exports.Signal = Signal
 // `run` with every value of `xs`.
 
 // (x) -> Signal x -> nil
-function spawn(run, xs) {
-  if (xs.send) {
-    xs.customers = [xs.send, run]
-    xs.send = xs.dispatch
+function spawn(run, signal) {
+  // If signal has not being spawned yet set a
+  // reciver and schedule a generator.
+  if (!signal.receive) {
+    signal.receive = run
+    setTimeout(signal.generate, 0, dispatch(signal))
   }
+  // If signal is already scheduled & there is a
+  // single receiver, create an array of active
+  // receivers and convert receiver to a dispatcher.
+  else if (!signal.receivers) {
+    signal.receivers = [signal.receive, run]
+    signal.receive = null
+  }
+  // If signal is already dispatching & there are
+  // multiple receivers add new receiver to the
+  // array of active receivers.
   else {
-    xs.send = run
-    setTimeout(xs.generate, 0, xs.receive)
+    xs.receivers.push(run)
   }
-  xs.spawn(run)
 }
 exports.spawn = spawn
 
@@ -76,10 +116,15 @@ exports.spawn = spawn
 // Create a constant signal that never changes.
 
 // a -> Signal a
-function constant(x) {
-  return new Signal(function() {}, x)
+function Constant(value) {
+  if (!(this instanceof Constant))
+    return new Constant(value)
+
+  this.value = value
 }
-exports.constant = constant
+Constant.prototype = Object.create(Signal.prototype)
+Constant.prototype.generate = function() {}
+exports.constant = Constant
 
 // Transform given signals with a given function.
 
@@ -102,7 +147,7 @@ function map(f, xs, ys) {
 
     var index = 0
     while (index < count) {
-      inputs[index](forward)
+      spawn(forward, inputs[index])
       index = index + 1
     }
   }, f.apply(f, values))
@@ -116,6 +161,36 @@ exports.lift5 = map
 exports.lift6 = map
 exports.lift7 = map
 exports.lift8 = map
+
+// Keep only events that satisfy the given predicate.
+// Elm does not allow undefined signals, so a base case
+// must be provided in case the predicate is never satisfied.
+
+// (x -> Bool) -> x -> Signal x -> Signal x
+function keepIf(p, x, xs) {
+  x = p(xs.value) ? xs.value : x
+  return new Signal(function(next) {
+    spawn(function(x) {
+      return p(x) ? next(x) : Skip
+    }, xs)
+  }, x)
+}
+exports.keepIf = keepIf
+
+// Drop events that satisfy the given predicate. Elm does not allow
+// undefined signals, so a base case must be provided in case the
+// predicate is never satisfied.
+
+// (x -> Bool) -> x -> Signal x -> Signal x
+function dropIf(p, x, xs) {
+  x = p(xs.value) ? x : xs.value
+  return new Signal(function(next) {
+    spawn(function(x) {
+      return p(x) ? Signal.Skip : next(x)
+    }, xs)
+  }, x)
+}
+exports.dropIf = dropIf
 
 // Merge two signals into one, biased towards the
 // first signal if both signals update at the same time.
@@ -179,35 +254,7 @@ function countIf(p, xs) {
 }
 exports.countIf = countIf
 
-// Keep only events that satisfy the given predicate.
-// Elm does not allow undefined signals, so a base case
-// must be provided in case the predicate is never satisfied.
 
-// (x -> Bool) -> x -> Signal x -> Signal x
-function keepIf(p, x, xs) {
-  x = p(xs.value) ? x.value : x
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return p(x) ? next(x) : Skip
-    }, xs)
-  }, x)
-}
-exports.keepIf = keepIf
-
-// Drop events that satisfy the given predicate. Elm does not allow
-// undefined signals, so a base case must be provided in case the
-// predicate is never satisfied.
-
-// (x -> Bool) -> x -> Signal x -> Signal x
-function dropIf(p, x, xs) {
-  x = p(xs.value) ? x : x.value
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return p(x) ? Signal.Skip : next(x)
-    }, xs)
-  }, x)
-}
-exports.dropIf = dropIf
 
 // Keep events only when the first signal is true. When the first signal
 // becomes true, the most recent value of the second signal will be propagated.
@@ -283,6 +330,4 @@ function sampleOn(ticks, data) {
   }, data.value)
 }
 exports.sampleOn = sampleOn
-
-
 
