@@ -105,9 +105,12 @@ exports.Signal = Signal
 
 // (x) -> Signal x -> nil
 function spawn(run, signal) {
+  if (!signal) {
+    throw TypeError("Can't spawn non signal")
+  }
   // If signal has not being spawned yet set a
   // reciver and schedule a generator.
-  if (!signal.receive) {
+  else if (!signal.receive) {
     signal.receive = run
     setTimeout(signal.generate, 0, dispatch(signal))
   }
