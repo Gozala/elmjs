@@ -459,5 +459,55 @@ exports["test combine concurrent signals"] = function(assert, done) {
   }
 }
 
+var count = signal.count
+exports["test count"] = function(assert, done) {
+  var input = Signal(function(next) {
+    next("a")
+    next("b")
+    next("c")
+    next("d")
+
+    assert.deepEqual(actual, [1, 2, 3, 4], "values were indexed")
+    done()
+  }, 0)
+
+  var output = count(input)
+  assert.equal(output.value, 0, "initial is 0")
+
+  var actual = []
+  spawn(function(x) {
+    actual.push(x.valueOf())
+  }, output)
+}
+
+var countIf = signal.countIf
+exports["test countIf"] = function(assert, done) {
+  var isUpperCase = function(c) {
+    return c.toUpperCase() == c
+  }
+
+  var input = Signal(function(next) {
+    next("a")
+    assert.deepEqual(actual, [], "don't count a")
+    next("B")
+    assert.deepEqual(actual, [1], "count B")
+    next("C")
+    assert.deepEqual(actual, [1, 2], "count C")
+    next("d")
+    assert.deepEqual(actual, [1, 2], "don't count d")
+    next("D")
+    assert.deepEqual(actual, [1, 2, 3], "count D")
+
+    done()
+  }, "B")
+
+  var output = countIf(isUpperCase, input)
+  assert.equal(output.value, 0, "initial is 0")
+
+  var actual = []
+  spawn(function(x) {
+    actual.push(x.valueOf())
+  }, output)
+}
 
 require("test").run(exports)
