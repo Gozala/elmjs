@@ -217,12 +217,12 @@ exports.combine = combine
 // Create a past-dependent signal. Each value given on the input signal
 // will be accumulated, producing a new output value.
 function foldp(f, x, xs) {
-  return new Signal(function(next) {
-    var result = x
-    spawn(function(current) {
-      return next(result = f(result, current))
+  var output = new Signal(function(next) {
+    spawn(function(value) {
+      return next(f(output.value, value))
     }, xs)
   }, x)
+  return output
 }
 exports.foldp = foldp
 
