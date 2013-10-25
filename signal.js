@@ -53,7 +53,8 @@ function dispatch(signal) {
     // Optimal case with a single receiver.
     if (signal.receive) {
 
-      result = signal.receive(signal.value = value, signal)
+      result = signal.receive(value, signal)
+      signal.value = value
       if (result === Break) signal.receive = null
     }
     // If multiple receivers are subscribed dispatches `value` to eoch one.
@@ -78,6 +79,7 @@ function dispatch(signal) {
           index = index + 1
         }
       }
+      signal.value = value
       // If no more receivers `Break` the generator.
       result = receivers.length ? void(0) : Break
     }
