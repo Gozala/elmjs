@@ -1,5 +1,18 @@
 "use strict";
 
+
+// The library for general signal manipulation. Includes `lift` function
+// (that supports up to 8 inputs), combinations, filters, and past-dependence.
+//
+// Signals are time-varying values. Lifted functions are reevaluated whenver
+// any of their input signals has an event. Signal events may be of the same
+// value as the previous value of the signal. Such signals are useful for
+// timing and past-dependence.
+//
+// Some useful functions for working with time (e.g. setting FPS) and combining
+// signals and time (e.g. delaying updates, getting timestamps) can be found in
+// the Time library.
+
 var slicer = Array.prototype.slice
 
 function Meta(value) {
@@ -112,6 +125,7 @@ function spawn(run, signal) {
 }
 exports.spawn = spawn
 
+// # Combine
 
 // Create a constant signal that never changes.
 
@@ -162,35 +176,6 @@ exports.lift6 = map
 exports.lift7 = map
 exports.lift8 = map
 
-// Keep only events that satisfy the given predicate.
-// Elm does not allow undefined signals, so a base case
-// must be provided in case the predicate is never satisfied.
-
-// (x -> Bool) -> x -> Signal x -> Signal x
-function keepIf(p, x, xs) {
-  x = p(xs.value) ? xs.value : x
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return p(x) ? next(x) : Skip
-    }, xs)
-  }, x)
-}
-exports.keepIf = keepIf
-
-// Drop events that satisfy the given predicate. Elm does not allow
-// undefined signals, so a base case must be provided in case the
-// predicate is never satisfied.
-
-// (x -> Bool) -> x -> Signal x -> Signal x
-function dropIf(p, x, xs) {
-  x = p(xs.value) ? x : xs.value
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return p(x) ? Signal.Skip : next(x)
-    }, xs)
-  }, x)
-}
-exports.dropIf = dropIf
 
 // Merge two signals into one, biased towards the
 // first signal if both signals update at the same time.
@@ -222,6 +207,7 @@ function combine(inputs) {
 }
 exports.combine = combine
 
+// # Past-Dependence
 
 // Create a past-dependent signal. Each value given on the input signal
 // will be accumulated, producing a new output value.
@@ -240,7 +226,7 @@ exports.foldp = foldp
 // Signal x -> Signal Int
 function count(xs) {
   return foldp(function(x, y) {
-    return x + y
+    return x + 1
   }, 0, xs)
 }
 exports.count = count
@@ -254,7 +240,38 @@ function countIf(p, xs) {
 }
 exports.countIf = countIf
 
+// # Filters
 
+
+// Keep only events that satisfy the given predicate.
+// Elm does not allow undefined signals, so a base case
+// must be provided in case the predicate is never satisfied.
+
+// (x -> Bool) -> x -> Signal x -> Signal x
+function keepIf(p, x, xs) {
+  x = p(xs.value) ? xs.value : x
+  return new Signal(function(next) {
+    spawn(function(x) {
+      return p(x) ? next(x) : Skip
+    }, xs)
+  }, x)
+}
+exports.keepIf = keepIf
+
+// Drop events that satisfy the given predicate. Elm does not allow
+// undefined signals, so a base case must be provided in case the
+// predicate is never satisfied.
+
+// (x -> Bool) -> x -> Signal x -> Signal x
+function dropIf(p, x, xs) {
+  x = p(xs.value) ? x : xs.value
+  return new Signal(function(next) {
+    spawn(function(x) {
+      return p(x) ? Signal.Skip : next(x)
+    }, xs)
+  }, x)
+}
+exports.dropIf = dropIf
 
 // Keep events only when the first signal is true. When the first signal
 // becomes true, the most recent value of the second signal will be propagated.
