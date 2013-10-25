@@ -286,17 +286,15 @@ exports.dropIf = dropIf
 
 // Signal Bool -> x -> Signal x -> Signal x
 function keepWhen(state, x, xs) {
-  x = state.value ? xs.value : x
   return new Signal(function(next) {
-    var keep = state.value
     spawn(function(value) {
-      keep = value
-      return keep ? next(xs.value) : Skip
-    }, dropRepeats(state))
+      return !state.value && value ? next(xs.value) : Skip
+    }, state)
+
     spawn(function(value) {
-      return keep ? next(value) : Skip
-    })
-  }, x)
+      return state.value ? next(value) : Skip
+    }, xs)
+  }, state.value ? xs.value : x)
 }
 exports.keepWhen = keepWhen
 
@@ -308,18 +306,14 @@ exports.keepWhen = keepWhen
 
 // Signal Bool -> x -> Signal x -> Signal x
 function dropWhen(state, x, xs) {
-  x = state.value ? x : xs.value
-  state = dropRepeats(state)
   return new Signal(function(next) {
-    var drop = state.value
     spawn(function(value) {
-      drop = value
-      return drop ? Skip : next(xs.value)
+      return state.value && !value ? next(xs.value) : Skip
     }, state)
     spawn(function(value) {
-      return drop ? Skip : next(value)
-    })
-  }, x)
+      return state.value ? Skip : next(value)
+    }, xs)
+  }, state.value ? x : xs.value)
 }
 exports.dropWhen = dropWhen
 
@@ -329,12 +323,12 @@ exports.dropWhen = dropWhen
 
 // Signal x -> Signal x
 function dropRepeats(xs) {
-  var last = xs.value
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return last === x ? Skip : next(last = x)
+  var output = new Signal(function(next) {
+    spawn(function(value) {
+      return output.value === value ? Skip : next(value)
     }, xs)
-  }, last)
+  }, xs.value)
+  return output
 }
 exports.dropRepeats = dropRepeats
 
