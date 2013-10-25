@@ -510,4 +510,42 @@ exports["test countIf"] = function(assert, done) {
   }, output)
 }
 
+var dropRepeats = signal.dropRepeats
+exports["test dropRepeats"] = function(assert, done) {
+  var xs = Signal(function(next) {
+    next(0)
+    assert.deepEqual([], actual, "drop repeated initial")
+    next(1)
+    assert.deepEqual([1], actual, "changed to 1")
+    next(2)
+    assert.deepEqual([1, 2], actual, "changed to 2")
+    next(2)
+    assert.deepEqual([1, 2], actual, "drop repeated 2")
+    next(2)
+    assert.deepEqual([1, 2], actual, "drop repeated 2")
+    next(3)
+    assert.deepEqual([1, 2, 3], actual, "changed to 3")
+    next(3)
+    assert.deepEqual([1, 2, 3], actual, "drop repeated 3")
+    next(4)
+    assert.deepEqual([1, 2, 3, 4], actual, "changed to 4")
+    next(3)
+    assert.deepEqual([1, 2, 3, 4, 3], actual, "changed to 3")
+    next(3)
+    assert.deepEqual([1, 2, 3, 4, 3], actual, "drop repeated 3")
+    next(4)
+    assert.deepEqual([1, 2, 3, 4, 3, 4], actual, "changed to 4")
+    next(3)
+    assert.deepEqual([1, 2, 3, 4, 3, 4, 3], actual, "changed to 3")
+    done()
+  }, 0)
+
+  var output = dropRepeats(xs)
+  assert.equal(output.value, 0, "initial value is kept")
+
+  var actual = []
+  spawn(function(x) {
+    actual.push(x.valueOf())
+  }, output)
+}
 require("test").run(exports)
