@@ -548,4 +548,75 @@ exports["test dropRepeats"] = function(assert, done) {
     actual.push(x.valueOf())
   }, output)
 }
+
+var keepWhen = signal.keepWhen
+exports["test keepWhen"] = function(assert, done) {
+  var setState = null
+  var setX = null
+  var state = new Signal(function(next) {
+    setState = next
+    if (setX) runAsserts()
+  }, false)
+  var xs = new Signal(function(next) {
+    setX = next
+    if (setState) runAsserts()
+  }, 0)
+  var ys = keepWhen(state, 10, xs)
+
+  assert.equal(ys.value, 10, "inital value set")
+  var actual = []
+  spawn(function(y) {
+    actual.push(y)
+  }, ys)
+
+  function runAsserts() {
+    setX(1)
+    assert.equal(ys.value, 10, "inital value kept")
+    assert.deepEqual(actual, [], "not kept until true")
+
+    setX(2)
+    assert.equal(ys.value, 10, "inital value kept")
+    assert.deepEqual(actual, [], "not kept until true")
+
+    setState(true)
+    assert.equal(ys.value, 2, "last value set")
+    assert.deepEqual(actual, [2], "not kept until true")
+
+    setX(3)
+    assert.equal(ys.value, 3, "value propagated")
+    assert.deepEqual(actual, [2, 3], "new value collected")
+
+    setX(3)
+    assert.equal(ys.value, 3, "value propagated")
+    assert.deepEqual(actual, [2, 3, 3], "new value collected")
+
+    setState(false)
+    assert.equal(ys.value, 3, "value didn't change")
+    assert.deepEqual(actual, [2, 3, 3], "no changes to ys")
+
+    setX(4)
+    assert.equal(ys.value, 3, "value not propagated")
+    assert.deepEqual(actual, [2, 3, 3], "value isn't collected")
+
+    setState(false)
+    assert.equal(ys.value, 3, "value didn't change")
+    assert.deepEqual(actual, [2, 3, 3], "no changes to ys")
+
+    setState(true)
+    assert.equal(ys.value, 4, "value didn't change")
+    assert.deepEqual(actual, [2, 3, 3, 4], "no changes to ys")
+
+    setState(false)
+    assert.equal(ys.value, 4, "value didn't change")
+    assert.deepEqual(actual, [2, 3, 3, 4], "no changes to ys")
+
+    setState(true)
+    assert.equal(ys.value, 4, "value changed")
+    assert.deepEqual(actual, [2, 3, 3, 4, 4],
+                     "state chnages propagate same value")
+
+    done()
+  }
+}
+
 require("test").run(exports)
