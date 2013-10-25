@@ -688,4 +688,50 @@ exports["test dropWhen"] = function(assert, done) {
   }
 }
 
+var sampleOn = signal.sampleOn
+exports["test sampleOn"] = function(assert, done) {
+  var setX = null
+  var xs = new Signal(function(next) {
+    setX = next
+    if (tick) runAsserts()
+  }, 0)
+
+  var tick = null
+  var ticks = new Signal(function(next) {
+    tick = next
+    if (setX) runAsserts()
+  })
+
+  var ys = sampleOn(ticks, xs)
+  var actual = []
+  spawn(function(y) {
+    actual.push(y)
+  }, ys)
+
+  function runAsserts() {
+    assert.equal(ys.value, 0, "initial value is copied from xs")
+    tick()
+    assert.equal(ys.value, 0, "value is 0")
+    assert.deepEqual(actual, [0], "value propagated")
+
+    tick()
+    assert.equal(ys.value, 0, "value is 0")
+    assert.deepEqual(actual, [0, 0], "value propagated")
+
+    setX(1)
+    assert.equal(ys.value, 0, "value is still 0")
+    assert.deepEqual(actual, [0, 0], "value not propagated")
+
+    setX(2)
+    assert.equal(ys.value, 0, "value is still 0")
+    assert.deepEqual(actual, [0, 0], "value not propagated")
+
+    tick()
+    assert.equal(ys.value, 2, "value is 2")
+    assert.deepEqual(actual, [0, 0, 2], "value is propagated")
+
+    done()
+  }
+}
+
 require("test").run(exports)
