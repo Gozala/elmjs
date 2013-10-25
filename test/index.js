@@ -111,8 +111,14 @@ exports["test map multiple"] = function(assert, done) {
 exports["test concurrent multi map"] = function(assert, done) {
   var sendX = null
   var sendY = null
-  var xs = Signal(function(next) { sendX = next }, 0)
-  var ys = Signal(function(next) { sendY = next }, 0)
+  var xs = Signal(function(next) {
+    sendX = next
+    if (sendY) runAsserts()
+  }, 0)
+  var ys = Signal(function(next) {
+    sendY = next
+    if (sendX) runAsserts()
+  }, 0)
 
   var xys = map(function(x, y) { return [x, y] }, xs, ys)
   assert.deepEqual(xys.value, [0, 0], "initial value mapped")
@@ -121,7 +127,7 @@ exports["test concurrent multi map"] = function(assert, done) {
   spawn(function(xy) { actual.push(xy) }, xys)
   assert.deepEqual(actual, [], "nothing dispatched yet")
 
-  setTimeout(function() {
+  function runAsserts() {
     sendX(1)
     assert.deepEqual(actual, [[1, 0]], "x changed")
     sendX(1)
@@ -135,7 +141,7 @@ exports["test concurrent multi map"] = function(assert, done) {
     sendY(8)
     assert.deepEqual(actual, [[1, 0], [1, 0], [1, 7], [5, 7], [5, 7], [5, 8]], "y changed")
     done()
-  }, 100)
+  }
 }
 
 var keepIf = signal.keepIf
@@ -221,5 +227,237 @@ exports["test dropIf (keep initial)"] = function(assert, done) {
     actual.push(y)
   }, ys)
 }
+
+var foldp = signal.foldp
+exports["test flodp"] = function(assert, done) {
+  var xs = Signal(function(next) {
+    next(1)
+    next(2)
+    next(3)
+    next(4)
+
+    assert.deepEqual(actual, [6, 8, 11, 15], "values accumulated")
+    done()
+  }, 0)
+
+  var actual = []
+  var ys = foldp(function(p, x) {
+    return p + x
+  }, 5, xs)
+  assert.equal(ys.value, 5, "initial value set")
+
+  spawn(function(y) { actual.push(y) }, ys)
+}
+
+
+var merge = signal.merge
+exports["test synchronous merge"] = function(assert, done) {
+  var xs = Signal(function(next) {
+    next(1)
+    next(2)
+    next(3)
+  }, 0)
+
+  var ys = Signal(function(next) {
+    next(11)
+    next(12)
+    next(13)
+    next(14)
+
+    assert.deepEqual(actual, [1, 2, 3, 11, 12, 13, 14],
+                     "both signals were merged")
+    done()
+  }, 10)
+
+  var xys = merge(xs, ys)
+  assert.equal(xys.value, xs, "value is taken from first signal")
+
+  var actual = []
+  spawn(function(xy) {
+    actual.push(xy)
+  }, xys)
+}
+
+exports["test concurrent merge"] = function(assert, done) {
+  var sendX = null
+  var sendY = null
+  var xs = Signal(function(next) {
+    sendX = next
+    if (sendY) runAsserts()
+  }, 0)
+
+  var ys = Signal(function(next) {
+    sendY = next
+    if (sendX) runAsserts()
+  }, 10)
+
+  var xys = merge(xs, ys)
+  assert.equal(xys.value, xs, "value is taken from first signal")
+
+  var actual = []
+  spawn(function(xy) {
+    actual.push(xy)
+  }, xys)
+
+  function runAsserts() {
+    sendX(1)
+    assert.deepEqual(actual, [1], "got first from x")
+    sendX(2)
+    assert.deepEqual(actual, [1, 2], "got second from x")
+    sendY(3)
+    assert.deepEqual(actual, [1, 2, 3], "got first from y")
+    sendX(4)
+    assert.deepEqual(actual, [1, 2, 3, 4], "got third from x")
+
+    sendY(5)
+    sendY(6)
+    assert.deepEqual(actual, [1, 2, 3, 4, 5, 6], "got second & third from y")
+    done()
+  }
+}
+
+var merges = signal.merges
+exports["test synchronous merges"] = function(assert, done) {
+  var xs = Signal(function(next) {
+    next(1)
+    next(2)
+    next(3)
+  }, 0)
+
+  var ys = Signal(function(next) {
+    next(11)
+    next(12)
+    next(13)
+    next(14)
+
+    assert.deepEqual(actual, [1, 2, 3, 11, 12, 13, 14],
+                     "both signals were merged")
+    done()
+  }, 10)
+
+  var xys = merges([xs, ys])
+  assert.equal(xys.value, xs, "value is taken from first signal")
+
+  var actual = []
+  spawn(function(xy) {
+    actual.push(xy)
+  }, xys)
+}
+
+exports["test concurrent merges"] = function(assert, done) {
+  var sendX = null
+  var sendY = null
+  var xs = Signal(function(next) {
+    sendX = next
+    if (sendY) runAsserts()
+  }, 0)
+
+  var ys = Signal(function(next) {
+    sendY = next
+    if (sendX) runAsserts()
+  }, 10)
+
+  var xys = merges([xs, ys])
+  assert.equal(xys.value, xs, "value is taken from first signal")
+
+  var actual = []
+  spawn(function(xy) {
+    actual.push(xy)
+  }, xys)
+
+  function runAsserts() {
+    sendX(1)
+    assert.deepEqual(actual, [1], "got first from x")
+    sendX(2)
+    assert.deepEqual(actual, [1, 2], "got second from x")
+    sendY(3)
+    assert.deepEqual(actual, [1, 2, 3], "got first from y")
+    sendX(4)
+    assert.deepEqual(actual, [1, 2, 3, 4], "got third from x")
+
+    sendY(5)
+    sendY(6)
+    assert.deepEqual(actual, [1, 2, 3, 4, 5, 6], "got second & third from y")
+    done()
+  }
+}
+
+var combine = signal.combine
+exports["test synchronous combine"] = function(assert, done) {
+  var xs = Signal(function(next) {
+    next(1)
+    next(2)
+    next(3)
+  }, 0)
+
+  var ys = Signal(function(next) {
+    next(11)
+    next(12)
+    next(13)
+    next(14)
+
+    assert.deepEqual(actual, [
+      [1, 10],
+      [2, 10],
+      [3, 10],
+      [3, 11],
+      [3, 12],
+      [3, 13],
+      [3, 14]
+    ], "signals were combined")
+    done()
+  }, 10)
+
+  var xys = combine([xs, ys])
+  assert.deepEqual(xys.value, [0, 10], "initial value was combined")
+
+  var actual = []
+  spawn(function(xy) {
+    actual.push(xy)
+  }, xys)
+}
+
+exports["test combine concurrent signals"] = function(assert, done) {
+  var sendX = null
+  var sendY = null
+  var xs = Signal(function(next) {
+    sendX = next
+    if (sendY) runAsserts()
+  }, 0)
+
+  var ys = Signal(function(next) {
+    sendY = next
+    if (sendX) runAsserts()
+  }, 10)
+
+  var xys = combine([xs, ys])
+  assert.deepEqual(xys.value, [0, 10], "initial value combined")
+
+  var actual = []
+  spawn(function(xy) {
+    actual.push(xy)
+  }, xys)
+
+  function runAsserts() {
+    sendX(1)
+    assert.deepEqual(actual, [[1, 10]],
+                     "got first from x")
+    sendX(2)
+    assert.deepEqual(actual, [[1, 10], [2, 10]],
+                     "got second from x")
+    sendY(3)
+    assert.deepEqual(actual, [[1, 10], [2, 10], [2, 3]],
+                     "got first from y")
+    sendX(4)
+    assert.deepEqual(actual, [[1, 10], [2, 10], [2, 3], [4, 3]],
+                     "got third from x")
+
+    sendY(5)
+    assert.deepEqual(actual, [[1, 10], [2, 10], [2, 3], [4, 3], [4, 5]],
+                     "got second & third from y")
+    done()
+  }
+}
+
 
 require("test").run(exports)
