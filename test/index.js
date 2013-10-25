@@ -619,4 +619,73 @@ exports["test keepWhen"] = function(assert, done) {
   }
 }
 
+var dropWhen = signal.dropWhen
+exports["test dropWhen"] = function(assert, done) {
+  var setState = null
+  var setX = null
+  var state = new Signal(function(next) {
+    setState = next
+    if (setX) runAsserts()
+  }, false)
+  var xs = new Signal(function(next) {
+    setX = next
+    if (setState) runAsserts()
+  }, 0)
+  var ys = dropWhen(state, 10, xs)
+
+  assert.equal(ys.value, 0, "inital value kept")
+  var actual = []
+  spawn(function(y) {
+    actual.push(y)
+  }, ys)
+
+  function runAsserts() {
+    setX(1)
+    assert.equal(ys.value, 1, "value 1 propagated")
+    assert.deepEqual(actual, [1], "new value 1 is collected")
+
+    setX(2)
+    assert.equal(ys.value, 2, "value 2 propagated")
+    assert.deepEqual(actual, [1, 2], "new value 2 collected")
+
+    setState(true)
+    assert.equal(ys.value, 2, "last value 2 is kept")
+    assert.deepEqual(actual, [1, 2], "nothing propagated")
+
+    setX(3)
+    assert.equal(ys.value, 2, "value 3 isn't propagated")
+    assert.deepEqual(actual, [1, 2], "value 3 isn't collected")
+
+    setX(3)
+    assert.equal(ys.value, 2, "value 3 isn't propagated")
+    assert.deepEqual(actual, [1, 2], "value 3 isn't collected")
+
+    setState(false)
+    assert.equal(ys.value, 3, "last value 3 is set")
+    assert.deepEqual(actual, [1, 2, 3], "last value 3 is collected")
+
+    setX(4)
+    assert.equal(ys.value, 4, "value changed to 4")
+    assert.deepEqual(actual, [1, 2, 3, 4], "value 4 is collected")
+
+    setState(false)
+    assert.equal(ys.value, 4, "value 4 is preserved")
+    assert.deepEqual(actual, [1, 2, 3, 4], "last value 4 isn't collected")
+
+    setState(true)
+    assert.equal(ys.value, 4, "value didn't change")
+    assert.deepEqual(actual, [1, 2, 3, 4], "no changes collected")
+
+    setState(false)
+    assert.equal(ys.value, 4, "value didn't change")
+    assert.deepEqual(actual, [1, 2, 3, 4, 4], "last value 4 is collected")
+
+    setState(true)
+    assert.equal(ys.value, 4, "no changes")
+    assert.deepEqual(actual, [1, 2, 3, 4, 4], "no changes collected")
+
+    done()
+  }
+}
+
 require("test").run(exports)
