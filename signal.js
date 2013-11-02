@@ -12,6 +12,8 @@
 // Some useful functions for working with time (e.g. setting FPS) and combining
 // signals and time (e.g. delaying updates, getting timestamps) can be found in
 // the Time library.
+//
+// Module implements elm API: http://docs.elm-lang.org/library/Signal.elm
 
 var slicer = Array.prototype.slice
 
@@ -45,6 +47,7 @@ Signal.Return = Return
 Signal.return = Return
 Signal.Skip = Skip
 Signal.Break = Break
+exports.Break = Break
 
 
 function dispatch(signal) {
@@ -52,10 +55,8 @@ function dispatch(signal) {
     var result = void(0)
     // Optimal case with a single receiver.
     if (signal.receive) {
-
       result = signal.receive(value, signal)
       signal.value = value
-      if (result === Break) signal.receive = null
     }
     // If multiple receivers are subscribed dispatches `value` to eoch one.
     else if (signal.receivers) {
@@ -69,7 +70,14 @@ function dispatch(signal) {
 
         // If customer wishes to unsubscribe from updates
         // remove it from the set.
-        if (receive(value, signal) === Break) {
+        try {
+          result = receive(value, signal);
+        }
+        catch (error) {
+          console.error(error);
+        }
+
+        if (result === Break) {
           receivers.splice(index, 1)
           count = count - 1
         }
@@ -86,6 +94,12 @@ function dispatch(signal) {
     else {
       result = Break
     }
+
+    if (result === Break) {
+      signal.receive = null
+      signal.receivers = null
+    }
+
     return result
   }
 }
@@ -108,24 +122,24 @@ function spawn(run, signal) {
   if (!signal) {
     throw TypeError("Can't spawn non signal")
   }
-  // If signal has not being spawned yet set a
-  // reciver and schedule a generator.
-  else if (!signal.receive) {
-    signal.receive = run
-    setTimeout(signal.generate, 0, dispatch(signal))
+  // If signal is already dispatching & there are
+  // multiple receivers add new receiver to the
+  // array of active receivers.
+  else if (signal.receivers) {
+    signal.receivers.push(run)
   }
   // If signal is already scheduled & there is a
   // single receiver, create an array of active
   // receivers and convert receiver to a dispatcher.
-  else if (!signal.receivers) {
+  else if (signal.receive) {
     signal.receivers = [signal.receive, run]
     signal.receive = null
   }
-  // If signal is already dispatching & there are
-  // multiple receivers add new receiver to the
-  // array of active receivers.
+  // If signal has not being spawned yet set a
+  // reciver and schedule a generator.
   else {
-    xs.receivers.push(run)
+    signal.receive = run
+    setTimeout(signal.generate, 0, dispatch(signal))
   }
 }
 exports.spawn = spawn
