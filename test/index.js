@@ -1,148 +1,747 @@
 "use strict";
 
 var signal = require("../signal")
-var Signal = signal.Signal;
-var spawn = signal.spawn;
+var Input = signal.Input
+var Break = signal.Break
+var Return = signal.Return
+var connect = signal.connect
+var disconnect = signal.disconnect
+var start = signal.start
+var stop = signal.stop
+var receive = signal.receive
+var error = signal.error
+var end = signal.end
+var send = signal.send
 
-exports["test simple Signal"] = function(assert, done) {
-  var input = new Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-
-    assert.deepEqual(items, [1, 2, 3], "got all items")
-    done()
-  }, 0)
-
-  var items = []
-  spawn(function(value) {
-    items.push(value)
-  }, input)
+function Subject(options) {
+  var options = options || {}
+  this[signal.outputs] = []
+  this.name = "subject"
+  this.onStart = options.onStart
+  this.onStop = options.onStop
+  this.value = options.value
+  this.started = 0
+  this.stopped = 0
+}
+Subject.prototype = new Input()
+Subject.prototype[start] = function() {
+  this.started = this.started + 1
+  if (this.onStart)
+    this.onStart()
+}
+Subject.prototype[stop] = function() {
+  this.stopped = this.stopped + 1
+  if (this.onStop)
+    this.onStop()
+}
+Subject.prototype.toJSON = function() {
+  return {
+    started: this.started,
+    stopped: this.stopped,
+    value: this.value
+  }
 }
 
+function Client(options) {
+  options = options || {}
+  this.messages = []
+  this.errors = []
+  this.ends = []
 
-exports["test multiple users"] = function(assert, done) {
-  var input = new Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-    next(4)
+  this.onNext = options.onNext
+  this.onError = options.onError
+  this.onEnd = options.onEnd
 
-    assert.deepEqual(xs, [1, 2, 3, 4], "got all xs")
-    assert.deepEqual(ys, [1, 2, 3, 4], "got all ys")
-
-    done()
-  }, 0)
-
-  var xs = []
-  spawn(function(x) {
-    xs.push(x.valueOf())
-  }, input)
-
-  var ys = []
-  spawn(function(y) {
-    ys.push(y.valueOf())
-  }, input)
 }
+Client.prototype[receive] = function(input, message, source) {
+  this.messages.push(message)
+  return this.onNext && input.onNext(message, source)
+}
+Client.prototype[error] = function(input, message, source) {
+  this.errors.push(message)
+  return this.onError && input.onError(message, source)
+}
+Client.prototype[end] = function(input, source) {
+  this.ends.push(true)
+  return this.onEnd && input.onEnd(source)
+}
+Client.prototype.toJSON = function() {
+  return {
+    messages: this.messages,
+    errors: this.errors,
+    ends: this.ends
+  }
+}
+
+exports["test 2 messages & end"] = function(assert) {
+  var subject = new Subject({ value: null })
+
+  assert.deepEqual(subject.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: null
+  }, "nothing changed")
+
+  var client = new Client()
+  connect(subject, client)
+
+  assert.deepEqual(subject.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "subject started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "nothing received yet")
+
+  send(subject, 1)
+
+  assert.deepEqual(subject.toJSON(), {
+    value: 1,
+    started: 1,
+    stopped: 0
+  }, "value changed to 1")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "client received one message")
+
+  receive(subject, 2)
+
+  assert.deepEqual(subject.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "value changed to 2")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "client received second message")
+
+  end(subject)
+
+  assert.deepEqual(subject.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 1
+  }, "value changed to 2")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: [true]
+  }, "client received second message")
+}
+
+exports["test multiple connections"] = function(assert) {
+  var source = new Subject({ value: null });
+  var order = []
+
+  assert.deepEqual(source.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: null
+  }, "nothing happened yet")
+
+  var client1 = new Client({
+    onNext: function() {
+      order.push(1)
+    }
+  });
+
+  connect(source, client1)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "source was started")
+
+  send(source, 1)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "source.value changed to 1")
+
+  assert.deepEqual(client1.toJSON(), {
+    ends: [],
+    messages: [1],
+    errors: []
+  }, "one message received on clien1")
+
+  var client2 = new Client({
+    onNext: function() {
+      order.push(2)
+    }
+  })
+
+  connect(source, client2);
+
+  send(source, 2)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source.value changed to 2");
+
+  assert.deepEqual(client1.toJSON(), {
+    ends: [],
+    messages: [1, 2],
+    errors: []
+  }, "messagese received on client 1")
+
+  assert.deepEqual(client2.toJSON(), {
+    ends: [],
+    messages: [2],
+    errors: []
+  }, "message received on clien 2");
+
+  var client3 = new Client({
+    onNext: function() {
+      order.push(3)
+      return new Break()
+    }
+  })
+
+  connect(source, client3)
+
+  send(source, 3)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source.value changed to 3")
+
+  assert.deepEqual(client1.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: []
+  }, "client1 received 3 messages")
+
+  assert.deepEqual(client2.toJSON(), {
+    messages: [2, 3],
+    errors: [],
+    ends: []
+  }, "client2 received 2 messages")
+
+  assert.deepEqual(client3.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: []
+  }, "client3 received 1 message")
+
+  send(source, 4)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source.value changed to 4")
+
+  assert.deepEqual(client1.toJSON(), {
+    messages: [1, 2, 3, 4],
+    errors: [],
+    ends: []
+  }, "client1 received 4 messages")
+
+  assert.deepEqual(client2.toJSON(), {
+    messages: [2, 3, 4],
+    errors: [],
+    ends: []
+  }, "client2 received 3 messages")
+
+  assert.deepEqual(client3.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: []
+  }, "client3 did not got last message")
+
+  end(source)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "source stopped")
+
+  assert.deepEqual(client1.toJSON(), {
+    messages: [1, 2, 3, 4],
+    errors: [],
+    ends: [true]
+  }, "client1 received 4 messages")
+
+  assert.deepEqual(client2.toJSON(), {
+    messages: [2, 3, 4],
+    errors: [],
+    ends: [true]
+  }, "client2 received 3 messages")
+
+  assert.deepEqual(client3.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: []
+  }, "client3 did not got last message")
+
+  assert.deepEqual(order,
+                   [1, 1, 2, 1, 2, 3, 1, 2],
+                   "order of received message is correct")
+}
+
+exports["test last disconnect stops"] = function(assert) {
+  var source = new Subject({ value: 0 })
+  var client = new Client({
+    onNext: function(message) {
+      return new Break()
+    }
+  })
+
+  assert.deepEqual(source.toJSON(), {
+    value: 0,
+    started: 0,
+    stopped: 0
+  }, "source is in initial state")
+
+  connect(source, client)
+
+  assert.deepEqual(source.toJSON(), {
+    value: 0,
+    started: 1,
+    stopped: 0
+  }, "source in started state")
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "client got nothing so far")
+
+  send(source, 1)
+
+  assert.deepEqual(source.toJSON(), {
+    value: 1,
+    started: 1,
+    stopped: 1
+  }, "source was stopped")
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "client got one message")
+}
+
+exports["test same client can connect once"] = function(assert) {
+  var source = new Subject({ value: null })
+  var client = new Client()
+
+  connect(source, client)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "source started")
+
+  send(source, 1)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "source value changed to 1")
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "got one message")
+
+  connect(source, client)
+  send(source, 2)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source value changed to 2")
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "got only one message")
+}
+
+exports["test manual disconnect stops"] = function(assert) {
+  var source = new Subject({ value: 0 })
+  var a = new Client()
+  var b = new Client()
+
+  connect(source, a)
+  connect(source, b)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 0
+  }, "input started")
+
+  send(source, 1)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "source.value is 1")
+
+  assert.deepEqual(a.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "a got a message")
+
+  assert.deepEqual(b.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "b got a message")
+
+  disconnect(source, a)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "source.value is 1")
+
+  assert.deepEqual(a.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "disconnected a did not get a message")
+
+  send(source, 2)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source.value is 2")
+
+  assert.deepEqual(a.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "disconnected a did not get a message")
+
+  assert.deepEqual(b.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "b got a message")
+
+  disconnect(source, b)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 2
+  }, "source was stopped")
+
+  assert.deepEqual(a.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "a didn't change")
+
+  assert.deepEqual(b.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "b ended")
+}
+
 
 var constant = signal.constant
-exports["test constant"] = function(assert, done) {
+exports["test constant"] = function(assert) {
   var one = constant(1)
 
   assert.equal(one.value, 1, "value is given one")
 
-  spawn(function() {
-    assert.fail("signal should not change value")
-  }, one)
+  var received = 0
+  var errored = 0
+  var ended = 0
 
+  var client = new Client()
+  connect(one, client)
 
-  setTimeout(done, 100)
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errrs: [],
+    ends: []
+  }, "nothing received");
 }
 
-var map = signal.map
-exports["test map"] = function(assert, done) {
-  var input = Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-    next(4)
+var lift = signal.lift
+exports["test lift1"] = function(assert) {
+  var order = []
+  var source = new Subject({ value: 0 })
 
-    assert.deepEqual(xs, [2, 3, 4, 5], "values were mapped")
-    done()
-  }, 0)
+  assert.equal(source.value, 0, "value is 0")
 
-  var output = map(function(x) { return x + 1 }, input)
-  assert.equal(output.value, 1, "initial value was mapped")
+  var xs = lift(function(x) { return x + 1 }, source)
+  var ys = lift(function(x) { return x * 2 }, source)
+  var zs = lift(function(y) { return y + 2 }, ys)
 
-  var xs = []
-  spawn(function(x) {
-    xs.push(x.valueOf())
-  }, output)
+  assert.deepEqual(source.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 0
+  }, "source isn't started yet")
+
+  assert.equal(xs.value, 1, "xs.value is 1")
+  assert.equal(ys.value, 0, "ys.value is 0")
+  assert.equal(zs.value, 2, "zs.value is 2")
+
+  var zclient = new Client({ onNext: function() { order.push("z") } })
+  connect(zs, zclient)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 0
+  }, "source started")
+
+  send(source, 3)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value is 3")
+
+  assert.deepEqual(zclient.toJSON(), {
+    messages: [8],
+    errors: [],
+    ends: []
+  }, "message received on the client")
+
+  assert.equal(xs.value, 1, "xs.value didn't changed")
+  assert.equal(ys.value, 6, "ys.value changed to 6")
+  assert.equal(zs.value, 8, "zs.value changed to 8")
+
+  var xclient = new Client({ onNext: function() { order.push("x") }})
+  connect(xs, xclient)
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source didnt changed")
+
+  assert.deepEqual(zclient.toJSON(), {
+    messages: [8],
+    errors: [],
+    ends: []
+  }, "message received on the client")
+
+  assert.deepEqual(xclient.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "nothing happende yet")
+
+  send(source, Return(4))
+
+  assert.deepEqual(source.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "source value is 4 and it's stopped")
+
+  assert.deepEqual(zclient.toJSON(), {
+    messages: [8, 10],
+    errors: [],
+    ends: [true]
+  }, "z client received message & ended")
+
+  assert.deepEqual(xclient.toJSON(), {
+    messages: [5],
+    errors: [],
+    ends: [true]
+  }, "x client received message & ended")
+
+  assert.equal(xs.value, 5, "xs.value changed to 5")
+  assert.equal(ys.value, 8, "ys.value changed to 8")
+  assert.equal(zs.value, 10, "zs.value changed to 10")
 }
 
+exports["test liftN"] = function(assert) {
+  var xs = new Subject({ value: 0 })
+  var ys = new Subject({ value: 5 })
+  var client = new Client();
 
-exports["test map multiple"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(1)
-    next(2)
-  }, 0)
-
-  var ys = Signal(function(next) {
-    next(6)
-    next(7)
-    next(8)
-
-    assert.deepEqual(actual, [ 6, 7, 8, 9, 10 ], "values were mapped")
-    done()
-  }, 5)
-
-  var xys = map(function(x, y) {
+  var xys = lift(function(x, y) {
     return x + y
-  }, xs, ys)
+  }, xs, ys);
 
-  assert.equal(xys.value, 5, "initial value was mapped")
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 0
+  }, "xs has not started yet")
 
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
+  assert.deepEqual(ys.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 5
+  }, "ys has not started yet")
+
+  assert.equal(xys.value, 5, "xys.value is 5")
+
+  connect(xys, client);
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 0
+  }, "xs started")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "ys started")
+
+  assert.equal(xys.value, 5, "xys.value is still 5")
+
+  send(xs, 1)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs.value changed to 1")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "ys value didn't change")
+
+  assert.equal(xys.value, 6, "xys.value changed to 6")
+
+  send(ys, 6)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs.value is still 1")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 6
+  }, "ys value changed to 6")
+
+  assert.equal(xys.value, 7, "xys.value changed to 7")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value changed to 2")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 6
+  }, "ys value didn't change")
+
+  assert.equal(xys.value, 8, "xys.value changed to 8")
+
+  send(ys, 8)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value didn't change")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 8
+  }, "ys value changed to 8")
+
+  assert.equal(xys.value, 10, "xys.value changed to 10")
+
+  send(ys, Return(5))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value didn't change")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "ys value changed to 5 & stopped")
+
+  assert.equal(xys.value, 7, "xys.value changed to 7")
+
+  send(xs, 5)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "xs.value changed to 5")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "ys value didn't change")
+
+  assert.equal(xys.value, 10, "xys.value changed to 10")
+
+  send(xs, Return(7))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 7
+  }, "stopped and changed xs.value to 7")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "ys value didn't change")
+
+  assert.equal(xys.value, 12, "xys.value changed to 12")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [6, 7, 8, 10, 7, 10, 12],
+    errors: [],
+    ends: [true]
+  }, "all messages received on the client")
 }
 
-exports["test concurrent multi map"] = function(assert, done) {
-  var sendX = null
-  var sendY = null
-  var xs = Signal(function(next) {
-    sendX = next
-    if (sendY) runAsserts()
-  }, 0)
-  var ys = Signal(function(next) {
-    sendY = next
-    if (sendX) runAsserts()
-  }, 0)
-
-  var xys = map(function(x, y) { return [x, y] }, xs, ys)
-  assert.deepEqual(xys.value, [0, 0], "initial value mapped")
-
-  var actual = []
-  spawn(function(xy) { actual.push(xy) }, xys)
-  assert.deepEqual(actual, [], "nothing dispatched yet")
-
-  function runAsserts() {
-    sendX(1)
-    assert.deepEqual(actual, [[1, 0]], "x changed")
-    sendX(1)
-    assert.deepEqual(actual, [[1, 0], [1, 0]], "x changed again")
-    sendY(7)
-    assert.deepEqual(actual, [[1, 0], [1, 0], [1, 7]], "y changed")
-    sendX(5)
-    assert.deepEqual(actual, [[1, 0], [1, 0], [1, 7], [5, 7]], "x changed")
-    sendY(7)
-    assert.deepEqual(actual, [[1, 0], [1, 0], [1, 7], [5, 7], [5, 7]], "y changed")
-    sendY(8)
-    assert.deepEqual(actual, [[1, 0], [1, 0], [1, 7], [5, 7], [5, 7], [5, 8]], "y changed")
-    done()
-  }
-}
+/*
 
 var keepIf = signal.keepIf
 var isOdd = function(x) { return x % 2 }
@@ -733,5 +1332,4 @@ exports["test sampleOn"] = function(assert, done) {
     done()
   }
 }
-
-require("test").run(exports)
+*/
