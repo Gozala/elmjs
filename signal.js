@@ -15,17 +15,59 @@
 //
 // Module implements elm API: http://docs.elm-lang.org/library/Signal.elm
 
-var slicer = Array.prototype.slice
 
-function Meta(value) {
-  return this.value = value
-}
-Meta.prototype.valueOf = function() {
-  return this.value
+var $source = "source@signal"
+var $sources = "sources@signal"
+var $outputs = "outputs@signal"
+var $connect = "connect@signal"
+var $disconnect = "disconnect@signal"
+var $receive = "receive@signal"
+var $error = "error@signal"
+var $end = "end@signal"
+var $start = "start@signal"
+var $stop = "stop@signal"
+var $state = "state@signal"
+
+function outputs(input) { return input[$outputs] }
+outputs.toString = function() { return $outputs }
+exports.outputs = outputs
+
+function start(input) { input[$start](input) }
+start.toString = function() { return $start }
+exports.start = start
+
+function stop(input) { input[$stop](input) }
+stop.toString = function() { return $stop }
+exports.stop = stop
+
+function connect(source, target) { source[$connect](source, target) }
+connect.toString = function() { return $connect }
+exports.connect = connect
+
+function disconnect(source, target) { source[$disconnect](source, target) }
+disconnect.toString = function() { return $disconnect }
+exports.disconnect = disconnect
+
+function receive(input, message) { input[$receive](input, message) }
+receive.toString = function() { return $receive }
+exports.receive = receive
+
+function error(input, message) { input[$error](input, message) }
+error.toString = function() { return $error }
+exports.error = error
+
+function end(input) { input[$end](input) }
+end.toString = function() { return $end }
+exports.end = end
+
+function stringify(input) {
+  return input.name + "[" + (input[$outputs] || []).map(function(x) { return x.name }) + "]"
 }
 
-var Break = new Meta(null)
-var Skip = new Meta(null)
+var stringifier = Object.prototype.toString
+function isError(message) {
+  return stringifier.call(message) === "[object Error]"
+}
 
 function Return(value) {
   if (!(this instanceof Return))
@@ -33,212 +75,356 @@ function Return(value) {
 
   this.value = value
 }
-Return.prototype = new Meta()
+exports.Return = Return
 
-
-function Signal(generator, initial) {
-  if (!(this instanceof Signal))
-    return new Signal(generator, initial)
-
-  this.value = initial
-  this.generate = generator
+function send(input, message) {
+  if (message instanceof Return) {
+    // console.log("write message")
+    input[$receive](input, message.value)
+    input[$end](input)
+  }
+  else if (isError(message)) {
+    input[$error](input, message)
+  }
+  else {
+    input[$receive](input, message)
+  }
 }
-Signal.Return = Return
-Signal.return = Return
-Signal.Skip = Skip
-Signal.Break = Break
+exports.send = send
+
+function Break() {}
 exports.Break = Break
 
 
-function dispatch(signal) {
-  return function dispatch(value) {
+function Input() {}
+exports.Input = Input
+
+// `Input.start` is invoked with an `input` whenever system is
+// ready to start receiving values. After this point `input` can
+// start sending messages. Generic behavior is to `connect` to
+// the `input[$source]` to start receiving messages.
+Input.start = function(input) {
+  var source = input[$source]
+  source[$connect](source, input)
+}
+
+// `Input.stop` is invoked with an `input` whenever it needs to
+// stop. After this point `input` should stop sending messages.
+// Generic `Input` behavior is to `disconnect` from the
+// `input[$source]` so no more `messages` will be received.
+Input.stop = function(input) {
+  //console.debug("<< stop", stringify(input))
+  var source = input[$source]
+  source[$disconnect](source, input)
+}
+
+// `Input.connect` is invoked with `input` and `output`. This
+// implementation put's `output` to it's `$output` ports to
+// delegate received `messages` to it.
+Input.connect = function(input, output) {
+  var outputs = input[$outputs]
+  if (outputs.indexOf(output) < 0) {
+    outputs.push(output)
+    if (outputs.length === 1)
+      input[$start](input)
+  }
+}
+
+// `Input.disconnect` is invoked with `input` and an `output`
+// connected to it. After this point `output` should not longer
+// receive messages from the `input`. If it's a last `output`
+// `input` will be stopped.
+Input.disconnect = function(input, output) {
+  var outputs = input[$outputs]
+  var index = outputs.indexOf(output)
+  if (index >= 0) {
+    outputs.splice(index, 1)
+    if (outputs.length === 0)
+      input[$stop](input)
+  }
+}
+
+// `Input.Port` creates a message receiver port. `Input` instances support
+// `message`, `error`, `end` ports.
+Input.Port = function(port) {
+  var isError = port === $error
+  var isEnd = port === $end
+  var isMessage = port === $receive
+
+  // Function will write `message` to a given `input`. This means
+  // it will delegeate messages to it's `input[$outputs]` ports.
+  return function write(input, message) {
+    //console.log("write to", stringify(input)  + ":" + port)
+    var outputs = input[$outputs]
     var result = void(0)
-    // Optimal case with a single receiver.
-    if (signal.receive) {
-      result = signal.receive(value, signal)
-      signal.value = value
-    }
-    // If multiple receivers are subscribed dispatches `value` to eoch one.
-    else if (signal.receivers) {
-      var receivers = signal.receivers
-      var count = receivers.length
-      var index = 0
+    var count = outputs.length
+    var index = 0
 
-      // Dispatch updated signal `value` to an every customer of this `signal`.
-      while (index < count) {
-        var receive = receivers[index]
-
-        // If customer wishes to unsubscribe from updates
-        // remove it from the set.
-        try {
-          result = receive(value, signal);
+    // Note: dispatch loop decreases count or increases index as needed.
+    // This makes sure that new connections will not receive messages
+    // until next dispatch loop & intentionally so.
+    while (index < outputs.length) {
+      // Attempt to send a value to a connected `output`. If this is
+      // `$end` `port` return `Break` to cause `output` to be
+      // disconnected. If any other `port` just deliver a `message`.
+      var output = outputs[index]
+      //console.log(index, output)
+      try {
+        result = isEnd ? output[port](output, input) :
+                 output[port](output, message, input)
+      }
+      catch (reason) {
+        throw reason
+        // If exception was thrown and `message` was send to `$error`
+        // `port` give up and log error.
+        if (isError) {
+          console.error("Failed to receive an error message",
+                        message,
+                        reason)
         }
-        catch (error) {
-          console.error(error);
-        }
-
-        if (result === Break) {
-          receivers.splice(index, 1)
-          count = count - 1
-        }
-        // Otherwise increment index, to send value to a
-        // next customer.
+        // If exception was thrown when writing to a different `port`
+        // attempt to write to an `$error` `port` of the `output`.
         else {
-          index = index + 1
+          try {
+            result = output[$error](output, reason, input)
+          }
+          // If exception is still thrown when writing to an `$error`
+          // `port` give up and log `error`.
+          catch (error) {
+            console.error("Failed to receive message & an error",
+                          message,
+                          reason,
+                          error);
+          }
         }
       }
-      signal.value = value
-      // If no more receivers `Break` the generator.
-      result = receivers.length ? void(0) : Break
-    }
-    else {
-      result = Break
+
+      // If result of sending `message` to an `output` was instance
+      // of `Break`, disconnect that `output` so it no longer get's
+      // messages. Note `index` is decremented as disconnect will
+      // remove it from `outputs`.
+      if (result instanceof Break || isEnd) {
+        input[$disconnect](input, output)
+      }
+      // On any other `result` just move to a next output.
+      else {
+        index = index + 1
+      }
     }
 
-    if (result === Break) {
-      signal.receive = null
-      signal.receivers = null
-    }
-
-    return result
+    // Once message was written to all outputs update `value` of
+    // the input.
+    if (isMessage)
+      input.value = message
   }
 }
-// Internal field used for holding set of customers
-// when `.dispatch` is used for sending values.
-Signal.prototype.receivers = null
-Signal.prototype.receive = null
-Signal.prototype.valueOf = function() {
-  return this.value
+
+// Inputs have `message`, `error` and `end` ports
+Input.receive = Input.Port($receive)
+Input.error = Input.Port($error)
+Input.end = Input.Port($end)
+
+// Same API functions are saved in the prototype in order to enable
+// polymorphic dispatch.
+Input.prototype[$start] = Input.start
+Input.prototype[$stop] = Input.stop
+Input.prototype[$connect] = Input.connect
+Input.prototype[$disconnect] = Input.disconnect
+Input.prototype[$receive] = Input.receive
+Input.prototype[$error] = Input.error
+Input.prototype[$end] = Input.end
+
+function Constant(value) {
+  this.value = value
 }
+Constant.ignore = function() {}
 
-exports.Signal = Signal
+Constant.prototype = new Input()
+Constant.prototype.constructor = Constant
+Constant.prototype[$start] = Constant.ignore
+Constant.prototype[$stop] = Constant.ignore
+Constant.prototype[$connect] = Constant.ignore
+Constant.prototype[$disconnect] = Constant.ignore
+Constant.prototype[$receive] = Constant.ignore
+Constant.prototype[$error] = Constant.ignore
+Constant.prototype[$end] = Constant.ignore
 
-
-// Takes `run` function, `xs` signal and invokes
-// `run` with every value of `xs`.
-
-// (x) -> Signal x -> nil
-function spawn(run, signal) {
-  if (!signal) {
-    throw TypeError("Can't spawn non signal")
-  }
-  // If signal is already dispatching & there are
-  // multiple receivers add new receiver to the
-  // array of active receivers.
-  else if (signal.receivers) {
-    signal.receivers.push(run)
-  }
-  // If signal is already scheduled & there is a
-  // single receiver, create an array of active
-  // receivers and convert receiver to a dispatcher.
-  else if (signal.receive) {
-    signal.receivers = [signal.receive, run]
-    signal.receive = null
-  }
-  // If signal has not being spawned yet set a
-  // reciver and schedule a generator.
-  else {
-    signal.receive = run
-    setTimeout(signal.generate, 0, dispatch(signal))
-  }
-}
-exports.spawn = spawn
-
-// # Combine
 
 // Create a constant signal that never changes.
 
 // a -> Signal a
-function Constant(value) {
-  if (!(this instanceof Constant))
-    return new Constant(value)
 
-  this.value = value
+function constant(value) {
+  return new Constant(value)
 }
-Constant.prototype = Object.create(Signal.prototype)
-Constant.prototype.generate = function() {}
-exports.constant = Constant
+exports.constant = constant
 
-// Transform given signals with a given function.
 
-// (x -> y -> ...) -> Signal x -> Signal y -> ... -> Signal z
-function map(f, xs, ys) {
-  var inputs = slicer.call(arguments, 1)
-  var count = inputs.length
-  var values = new Array(count)
-  var index = 0
-  while (index < count) {
-    values[index] = inputs[index].value
-    index = index + 1
+function Merge(inputs) {
+  this[$outputs] = []
+  this[$sources] = inputs
+  this.value = inputs[0].value
+}
+Merge.start = function(input) {
+  var sources = input[$sources]
+  var count = sources.length
+  var id = 0
+
+  while (id < count) {
+    var source = sources[id]
+    source[$connect](source, input)
+    id = id + 1
   }
-
-  return new Signal(function(next) {
-    function forward(value, input) {
-      values[inputs.indexOf(input)] = value
-      return next(f.apply(f, values))
-    }
-
-    var index = 0
-    while (index < count) {
-      spawn(forward, inputs[index])
-      index = index + 1
-    }
-  }, f.apply(f, values))
 }
-exports.map = map
-exports.lift = map
-exports.lift2 = map
-exports.lift3 = map
-exports.lift4 = map
-exports.lift5 = map
-exports.lift6 = map
-exports.lift7 = map
-exports.lift8 = map
+Merge.stop = function(input) {
+  var inputs = input[$sources]
+  var count = inputs.length
+  var id = 0
+  while (id < count) {
+    var source = inputs[id]
+    source[$disconnect](source, input)
+    id = id + 1
+  }
+}
+Merge.end = function(input, source) {
+  var sources = input[$sources]
+  var id = sources.indexOf(source)
+  if (id >= 0) {
+    sources.splice(id, 1)
+    if (sources.length === 0)
+      Input.end(input)
+  }
+}
 
+Merge.prototype = new Input()
+Merge.prototype.constructor = Merge
+Merge.prototype[$start] = Merge.start
+Merge.prototype[$stop] = Merge.stop
+Merge.prototype[$end] = Merge.end
 
 // Merge two signals into one, biased towards the
 // first signal if both signals update at the same time.
 
 // Signal x -> Signal y -> ... -> Signal z
-function merge(xs, ys) {
-  var inputs = slicer.call(arguments, 0)
-  var count = inputs.length
-  return new Signal(function(next) {
-    var index = 0
-    while (index < count) {
-      spawn(next, inputs[index])
-      index = index + 1
-    }
-  }, xs.value)
+function merge() {
+  return new Merge(arguments)
 }
 exports.merge = merge
+
 
 // Merge many signals into one, biased towards the
 // left-most signal if multiple signals update simultaneously.
 function merges(inputs) {
-  return merge.apply(merge, inputs)
+  return new Merge(inputs)
 }
 exports.merges = merges
 
-// Combine a list of signals into a signal of lists.
-function combine(inputs) {
-  return map.apply(map, [Array].concat(inputs))
-}
-exports.combine = combine
 
 // # Past-Dependence
 
 // Create a past-dependent signal. Each value given on the input signal
 // will be accumulated, producing a new output value.
-function foldp(f, x, xs) {
-  var output = new Signal(function(next) {
-    spawn(function(value) {
-      return next(f(output.value, value))
-    }, xs)
-  }, x)
-  return output
+
+function FoldP(step, value, input) {
+  this[$outputs] = []
+  this[$source] = input
+  this.value = value
+  this.step = step
+}
+FoldP.receive = function(input, message, source) {
+  Signal.receive(input, input.step(input.value, message))
+}
+
+FoldP.prototype = new Input()
+FoldP.prototype.constructor = FoldP
+FoldP.prototype[$receive] = FoldP.receive
+
+
+function foldp(step, x, xs) {
+  return new FoldP(step, x, xs)
 }
 exports.foldp = foldp
+
+
+// Optimized version that tracks single input.
+function Lift(step, input) {
+  this.step = step
+  this[$source] = input
+  this[$outputs] = []
+  this.value = step(input.value)
+}
+Lift.receive = function(input, message) {
+  Input.receive(input, input.step(message))
+}
+
+Lift.prototype = new Input()
+Lift.prototype.constructor = Lift
+Lift.prototype[$receive] = Lift.receive
+
+function LiftN(step, inputs) {
+  var count = inputs.length
+  var id = 0
+  var params = Array(count)
+  while (id < count) {
+    var input = inputs[id]
+    params[id] = input.value
+    id = id + 1
+  }
+  var value = step.apply(step, params)
+
+  this.step = step
+  this[$outputs] = []
+  this[$sources] = inputs
+  this[$state] = params
+  this.value = value
+}
+LiftN.start = Merge.start
+LiftN.stop = Merge.stop
+LiftN.end = Merge.end
+
+
+LiftN.receive = function(input, message, source) {
+  var params = input[$state]
+  var index = input[$sources].indexOf(source)
+  var step = input.step
+  params[index] = message
+  return Input.receive(input, step.apply(step, params))
+}
+
+LiftN.prototype = new Input()
+LiftN.prototype.constructor = LiftN
+LiftN.prototype[$start] = LiftN.start
+LiftN.prototype[$stop] = LiftN.stop
+LiftN.prototype[$end] = LiftN.end
+LiftN.prototype[$receive] = LiftN.receive
+
+var slicer = [].slice
+
+// Transform given signal(s) with a given `step` function.
+
+// (x -> y -> ...) -> Signal x -> Signal y -> ... -> Signal z
+function lift(step, xs, ys) {
+  return ys ? new LiftN(step, slicer.call(arguments, 1)) :
+         new Lift(step, xs)
+}
+exports.lift = lift
+exports.lift2 = lift
+exports.lift3 = lift
+exports.lift4 = lift
+exports.lift5 = lift
+exports.lift6 = lift
+exports.lift7 = lift
+exports.lift8 = lift
+exports.liftN = lift
+
+
+// Combine a array of signals into a signal of arrays.
+function combine(inputs) {
+  return new LiftN(Array, inputs)
+}
+exports.combine = combine
+
+
 
 // Count the number of events that have occured.
 
@@ -261,6 +447,17 @@ exports.countIf = countIf
 
 // # Filters
 
+function KeepIf(p, value, input) {
+  this.value = p(input.value) ? input.value : value
+  this[$source] = input
+}
+KeepIf.receive = function(input, message) {
+  if (p(message))
+    Input.receive(input, message)
+}
+KeepIf.prototype.constructor = KeepIf
+KeepIf.prototype = new Input()
+KeepIf.prototype[$receive] = KeepIf.receive
 
 // Keep only events that satisfy the given predicate.
 // Elm does not allow undefined signals, so a base case
@@ -268,14 +465,22 @@ exports.countIf = countIf
 
 // (x -> Bool) -> x -> Signal x -> Signal x
 function keepIf(p, x, xs) {
-  x = p(xs.value) ? xs.value : x
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return p(x) ? next(x) : Skip
-    }, xs)
-  }, x)
+  return new KeepIf(p, x, xs)
 }
 exports.keepIf = keepIf
+
+
+function DropIf(p, value, input) {
+  this.value = p(input.value) ? value : input.value
+  this[$source] = input
+}
+DropIf.receive = function(input, message) {
+  if (!p(message))
+    Input.receive(input, message)
+}
+DropIf.prototype.constructor = DropIf
+DropIf.prototype = new Input()
+DropIf.prototype[$receive] = DropIf.receive
 
 // Drop events that satisfy the given predicate. Elm does not allow
 // undefined signals, so a base case must be provided in case the
@@ -283,14 +488,10 @@ exports.keepIf = keepIf
 
 // (x -> Bool) -> x -> Signal x -> Signal x
 function dropIf(p, x, xs) {
-  x = p(xs.value) ? x : xs.value
-  return new Signal(function(next) {
-    spawn(function(x) {
-      return p(x) ? Signal.Skip : next(x)
-    }, xs)
-  }, x)
+  return new DropIf(p, x, xs)
 }
 exports.dropIf = dropIf
+
 
 // Keep events only when the first signal is true. When the first signal
 // becomes true, the most recent value of the second signal will be propagated.
@@ -299,16 +500,14 @@ exports.dropIf = dropIf
 // the first signal is never true.
 
 // Signal Bool -> x -> Signal x -> Signal x
-function keepWhen(state, x, xs) {
-  return new Signal(function(next) {
-    spawn(function(value) {
-      return !state.value && value ? next(xs.value) : Skip
-    }, state)
+function Skip() { return Skip }
+function isSkip(x) { return x === isSkip }
+function skipIfTrue(isTrue, x) { return isTrue ? Skip : x }
+function skipIfFalse(isTrue, x) { return isTrue ? x : Skip }
 
-    spawn(function(value) {
-      return state.value ? next(value) : Skip
-    }, xs)
-  }, state.value ? xs.value : x)
+function keepWhen(state, x, xs) {
+  var input = lift(skipIfFalse, state, xs)
+  return dropIf(isSkip, x, input)
 }
 exports.keepWhen = keepWhen
 
@@ -320,14 +519,8 @@ exports.keepWhen = keepWhen
 
 // Signal Bool -> x -> Signal x -> Signal x
 function dropWhen(state, x, xs) {
-  return new Signal(function(next) {
-    spawn(function(value) {
-      return state.value && !value ? next(xs.value) : Skip
-    }, state)
-    spawn(function(value) {
-      return state.value ? Skip : next(value)
-    }, xs)
-  }, state.value ? x : xs.value)
+  var input = lift(skipIfTrue, state, xs)
+  return dropIf(isSkip, x, input)
 }
 exports.dropWhen = dropWhen
 
@@ -337,12 +530,9 @@ exports.dropWhen = dropWhen
 
 // Signal x -> Signal x
 function dropRepeats(xs) {
-  var output = new Signal(function(next) {
-    spawn(function(value) {
-      return output.value === value ? Skip : next(value)
-    }, xs)
-  }, xs.value)
-  return output
+  return dropIf(function(x) {
+    return xs.value === x
+  }, xs.value, xs)
 }
 exports.dropRepeats = dropRepeats
 
@@ -351,13 +541,10 @@ exports.dropRepeats = dropRepeats
 // approximate time of the latest click.
 
 // Signal a -> Signal b -> Signal b
-function sampleOn(ticks, data) {
-  return new Signal(function(next) {
-    var result = data.value
-
-    spawn(function(value) { return result }, data)
-    spawn(function(_) { return result = next(data.value) }, ticks)
-  }, data.value)
+function sampleOn(ticks, input) {
+  return merge(dropIf(True, input.value, input),
+               lift(function(_) { return input.value }, ticks))
 }
 exports.sampleOn = sampleOn
 
+function True() { return true }
