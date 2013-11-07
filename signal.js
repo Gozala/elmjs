@@ -340,7 +340,7 @@ function FoldP(step, value, input) {
   this.step = step
 }
 FoldP.receive = function(input, message, source) {
-  Signal.receive(input, input.step(input.value, message))
+  Input.receive(input, input.step(input.value, message))
 }
 
 FoldP.prototype = new Input()
