@@ -514,7 +514,7 @@ exports.dropIf = dropIf
 
 // Signal Bool -> x -> Signal x -> Signal x
 function Skip() { return Skip }
-function isSkip(x) { return x === isSkip }
+function isSkip(x) { return x === Skip }
 function skipIfTrue(isTrue, x) { return isTrue ? Skip : x }
 function skipIfFalse(isTrue, x) { return isTrue ? x : Skip }
 
