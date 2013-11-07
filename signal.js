@@ -315,7 +315,7 @@ Merge.prototype[$end] = Merge.end
 
 // Signal x -> Signal y -> ... -> Signal z
 function merge() {
-  return new Merge(arguments)
+  return new Merge(slicer.call(arguments, 0))
 }
 exports.merge = merge
 
