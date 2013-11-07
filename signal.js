@@ -457,11 +457,13 @@ exports.countIf = countIf
 // # Filters
 
 function KeepIf(p, value, input) {
+  this.p = p
   this.value = p(input.value) ? input.value : value
+  this[$outputs] = []
   this[$source] = input
 }
 KeepIf.receive = function(input, message) {
-  if (p(message))
+  if (input.p(message))
     Input.receive(input, message)
 }
 KeepIf.prototype.constructor = KeepIf
@@ -480,15 +482,17 @@ exports.keepIf = keepIf
 
 
 function DropIf(p, value, input) {
+  this.p = p
   this.value = p(input.value) ? value : input.value
   this[$source] = input
+  this[$outputs] = []
 }
 DropIf.receive = function(input, message) {
-  if (!p(message))
+  if (!input.p(message))
     Input.receive(input, message)
 }
-DropIf.prototype.constructor = DropIf
 DropIf.prototype = new Input()
+DropIf.prototype.constructor = DropIf
 DropIf.prototype[$receive] = DropIf.receive
 
 // Drop events that satisfy the given predicate. Elm does not allow
