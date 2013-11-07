@@ -234,6 +234,9 @@ Input.prototype[$disconnect] = Input.disconnect
 Input.prototype[$receive] = Input.receive
 Input.prototype[$error] = Input.error
 Input.prototype[$end] = Input.end
+Input.prototype.toJSON = function() {
+  return { value: this.value }
+}
 
 function Constant(value) {
   this.value = value
