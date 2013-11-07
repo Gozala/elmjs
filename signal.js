@@ -80,7 +80,6 @@ exports.Return = Return
 
 function send(input, message) {
   if (message instanceof Return) {
-    // console.log("write message")
     input[$receive](input, message.value)
     input[$end](input)
   }
@@ -114,7 +113,6 @@ Input.start = function(input) {
 // Generic `Input` behavior is to `disconnect` from the
 // `input[$source]` so no more `messages` will be received.
 Input.stop = function(input) {
-  //console.debug("<< stop", stringify(input))
   var source = input[$source]
   source[$disconnect](source, input)
 }
@@ -155,7 +153,6 @@ Input.Port = function(port) {
   // Function will write `message` to a given `input`. This means
   // it will delegeate messages to it's `input[$outputs]` ports.
   return function write(input, message) {
-    //console.log("write to", stringify(input)  + ":" + port)
     var outputs = input[$outputs]
     var result = void(0)
     var count = outputs.length
@@ -169,7 +166,6 @@ Input.Port = function(port) {
       // `$end` `port` return `Break` to cause `output` to be
       // disconnected. If any other `port` just deliver a `message`.
       var output = outputs[index]
-      //console.log(index, output)
       try {
         result = isEnd ? output[port](output, input) :
                  output[port](output, message, input)
