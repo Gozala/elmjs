@@ -484,7 +484,7 @@ exports["test constant"] = function(assert) {
 
   assert.deepEqual(client.toJSON(), {
     messages: [],
-    errrs: [],
+    errors: [],
     ends: []
   }, "nothing received");
 }
@@ -741,595 +741,2008 @@ exports["test liftN"] = function(assert) {
   }, "all messages received on the client")
 }
 
-/*
+
 
 var keepIf = signal.keepIf
 var isOdd = function(x) { return x % 2 }
 var isEven = function(x) { return !(x % 2) }
-exports["test keepIf (keep initial)"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(2)
-    next(3)
-    next(4)
-    next(5)
-
-    assert.deepEqual(actual, [3, 5], "odds kept")
-    done()
-  }, 1)
-
-  var actual = []
+exports["test keepIf (keep initial)"] = function(assert) {
+  var xs = new Subject({ value: 1 })
   var ys = keepIf(isOdd, 0, xs)
-  assert.equal(ys.value, 1, "initial value was kept")
 
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 1
+  }, "xs is in initial state")
+
+  assert.equal(ys.value, 1, "xs.value is kept since it's odd")
+
+  var client = new Client()
+
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages received yet")
+
+  assert.equal(ys.value, 1, "ys.value is 1")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value changed to 2")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages were received")
+
+  assert.equal(ys.value, 1, "ys.value is kept 1")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "xs.value changed to 3")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: []
+  }, "message was received")
+
+  assert.equal(ys.value, 3, "ys.value updated to 3")
+
+  send(xs, 4)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "xs.value changed to 4")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: []
+  }, "no messages were received")
+
+  assert.equal(ys.value, 3, "ys.value is still 3")
+
+  send(xs, new Return(5))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "xs.value changed to 5 and stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [3, 5],
+    errors: [],
+    ends: [true]
+  }, "message & end was received")
+
+  assert.equal(ys.value, 5, "ys.value updated to 5")
 }
 
-exports["test keepIf (update initial)"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(2)
-    next(3)
-    next(4)
-    next(5)
 
-    assert.deepEqual(actual, [2, 4], "evens kept")
-    done()
-  }, 1)
-
-  var actual = []
+exports["test keepIf (update initial)"] = function(assert) {
+  var xs = new Subject({ value: 1 })
   var ys = keepIf(isEven, 0, xs)
-  assert.equal(ys.value, 0, "initial value updated")
 
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 1
+  }, "xs is in initial state")
+
+  assert.equal(ys.value, 0, "ys.value updated since it's not even")
+
+  var client = new Client()
+
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages received yet")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value changed to 2")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2],
+    errors: [],
+    ends: []
+  }, "messages was received")
+
+  assert.equal(ys.value, 2, "ys.value is updated to 2")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "xs.value changed to 3")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2],
+    errors: [],
+    ends: []
+  }, "message wasn't received")
+
+  assert.equal(ys.value, 2, "ys.value is 3")
+
+  send(xs, 4)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "xs.value changed to 4")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2, 4],
+    errors: [],
+    ends: []
+  }, "messages was received")
+
+  assert.equal(ys.value, 4, "ys.value set to 4")
+
+  send(xs, new Return(5))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "xs.value changed to 5 and stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2, 4],
+    errors: [],
+    ends: [true]
+  }, "ys ended, but nothing was received")
+
+  assert.equal(ys.value, 4, "ys.value is still 4")
 }
+
 
 var dropIf = signal.dropIf
-exports["test dropIf (update initial)"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(2)
-    next(3)
-    next(4)
-    next(5)
-
-    assert.deepEqual(actual, [2, 4], "odds dropt")
-    done()
-  }, 1)
-
-  var actual = []
+exports["test dropIf (update initial)"] = function(assert) {
+  var xs = new Subject({ value: 1 })
   var ys = dropIf(isOdd, 0, xs)
-  assert.equal(ys.value, 0, "initial value updated")
 
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 1
+  }, "xs is in initial state")
+
+  assert.equal(ys.value, 0, "ys.value updated since it's odd")
+
+   var client = new Client()
+
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages received yet")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value changed to 2")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2],
+    errors: [],
+    ends: []
+  }, "messages was received")
+
+  assert.equal(ys.value, 2, "ys.value is updated to 2")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "xs.value changed to 3")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2],
+    errors: [],
+    ends: []
+  }, "message wasn't received")
+
+  assert.equal(ys.value, 2, "ys.value is 2")
+
+  send(xs, new Return(4))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "xs.value changed to 4")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2, 4],
+    errors: [],
+    ends: [true]
+  }, "message received & end")
+
+  assert.equal(ys.value, 4, "ys.value is 4")
 }
 
-exports["test dropIf (keep initial)"] = function(assert, done) {
-   var xs = Signal(function(next) {
-    next(2)
-    next(3)
-    next(4)
-    next(5)
-
-    assert.deepEqual(actual, [3, 5], "evens dropped")
-    done()
-  }, 1)
-
-  var actual = []
+exports["test dropIf (keep initial)"] = function(assert) {
+  var xs = new Subject({ value: 1 })
   var ys = dropIf(isEven, 0, xs)
-  assert.equal(ys.value, 1, "initial value kept")
 
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 1
+  }, "xs is in initial state")
+
+  assert.equal(ys.value, 1, "ys.value remained")
+
+   var client = new Client()
+
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages received yet")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value changed to 2")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "messages wasn't received")
+
+  assert.equal(ys.value, 1, "ys.value is stayed same")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "xs.value changed to 3")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: []
+  }, "message was received")
+
+  assert.equal(ys.value, 3, "ys.value updated")
+
+  send(xs, new Return(4))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "xs.value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [3],
+    errors: [],
+    ends: [true]
+  }, "message received & end")
+
+  assert.equal(ys.value, 3, "ys.value remained")
 }
+
 
 var foldp = signal.foldp
-exports["test flodp"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-    next(4)
-
-    assert.deepEqual(actual, [6, 8, 11, 15], "values accumulated")
-    done()
-  }, 0)
-
-  var actual = []
+exports["test flodp"] = function(assert) {
+  var xs = new Subject({ value: 0 })
   var ys = foldp(function(p, x) {
     return p + x
   }, 5, xs)
-  assert.equal(ys.value, 5, "initial value set")
 
-  spawn(function(y) { actual.push(y) }, ys)
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 0,
+    stopped: 0
+  }, "source is in inital state")
+
+  assert.equal(ys.value, 5, "initial value is set")
+
+  var client = new Client()
+
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 1,
+    stopped: 0
+  }, "source was started")
+
+  assert.equal(ys.value, 5, "still in initial state")
+
+  send(xs, 1)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 1,
+    started: 1,
+    stopped: 0
+  }, "source was started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [6],
+    errors: [],
+    ends: []
+  }, "message was received")
+
+  assert.equal(ys.value, 6, "value changed")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source was started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [6, 8],
+    errors: [],
+    ends: []
+  }, "message was received")
+
+  assert.equal(ys.value, 8, "value changed")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+   }, "source was started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [6, 8, 11],
+    errors: [],
+    ends: []
+  }, "message was received")
+
+  assert.equal(ys.value, 11, "value changed")
+
+  send(xs, new Return(4))
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+   }, "source was stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [6, 8, 11, 15],
+    errors: [],
+    ends: [true]
+  }, "message & end was received")
+
+  assert.equal(ys.value, 15, "value changed")
 }
 
 
 var merge = signal.merge
-exports["test synchronous merge"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-  }, 0)
-
-  var ys = Signal(function(next) {
-    next(11)
-    next(12)
-    next(13)
-    next(14)
-
-    assert.deepEqual(actual, [1, 2, 3, 11, 12, 13, 14],
-                     "both signals were merged")
-    done()
-  }, 10)
-
+exports["test merge"] = function(assert) {
+  var xs = new Subject({ value: 0 })
+  var ys = new Subject({ value: 5 })
   var xys = merge(xs, ys)
-  assert.equal(xys.value, xs, "value is taken from first signal")
 
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
-}
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 0,
+    stopped: 0
+  }, "source#1 is in inital state")
 
-exports["test concurrent merge"] = function(assert, done) {
-  var sendX = null
-  var sendY = null
-  var xs = Signal(function(next) {
-    sendX = next
-    if (sendY) runAsserts()
-  }, 0)
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 0,
+    stopped: 0
+  }, "source#2 is in inital state")
 
-  var ys = Signal(function(next) {
-    sendY = next
-    if (sendX) runAsserts()
-  }, 10)
+  assert.equal(xys.value, 0, "initial value is from source#1")
 
-  var xys = merge(xs, ys)
-  assert.equal(xys.value, xs, "value is taken from first signal")
+  var client = new Client()
+  connect(xys, client)
 
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 1,
+    stopped: 0
+  }, "source#1 is in started state")
 
-  function runAsserts() {
-    sendX(1)
-    assert.deepEqual(actual, [1], "got first from x")
-    sendX(2)
-    assert.deepEqual(actual, [1, 2], "got second from x")
-    sendY(3)
-    assert.deepEqual(actual, [1, 2, 3], "got first from y")
-    sendX(4)
-    assert.deepEqual(actual, [1, 2, 3, 4], "got third from x")
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 is in started state")
 
-    sendY(5)
-    sendY(6)
-    assert.deepEqual(actual, [1, 2, 3, 4, 5, 6], "got second & third from y")
-    done()
-  }
+  assert.equal(xys.value, 0, "initial value is from source#1")
+
+  send(xs, 1)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 1,
+    started: 1,
+    stopped: 0
+  }, "source#1 value updated")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 value didn't change")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 1, "merged signal value updated")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source#1 value updated")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 value didn't change")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 2, "merged signal value updated")
+
+  send(ys, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source#1 value stayed")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+  }, "source#2 value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 3, "merged signal value updated")
+
+  send(xs, new Return(4))
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+  }, "source#1 value changed & stopped")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+  }, "source#2 value didn't change")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 4, "merged signal value updated")
+
+  send(ys, 5)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+  }, "source#1 value changed & stopped")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 5],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 5, "merged signal value updated")
+
+  send(ys, new Return(6))
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+  }, "source#1 value changed & stopped")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 6,
+    started: 1,
+    stopped: 1
+  }, "source#2 value changed & stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 5, 6],
+    errors: [],
+    ends: [true]
+  }, "message & end received")
+
+  assert.equal(xys.value, 6, "merged signal value updated")
 }
 
 var merges = signal.merges
-exports["test synchronous merges"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-  }, 0)
-
-  var ys = Signal(function(next) {
-    next(11)
-    next(12)
-    next(13)
-    next(14)
-
-    assert.deepEqual(actual, [1, 2, 3, 11, 12, 13, 14],
-                     "both signals were merged")
-    done()
-  }, 10)
-
+exports["test merges"] = function(assert) {
+  var xs = new Subject({ value: 0 })
+  var ys = new Subject({ value: 5 })
   var xys = merges([xs, ys])
-  assert.equal(xys.value, xs, "value is taken from first signal")
 
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
-}
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 0,
+    stopped: 0
+  }, "source#1 is in inital state")
 
-exports["test concurrent merges"] = function(assert, done) {
-  var sendX = null
-  var sendY = null
-  var xs = Signal(function(next) {
-    sendX = next
-    if (sendY) runAsserts()
-  }, 0)
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 0,
+    stopped: 0
+  }, "source#2 is in inital state")
 
-  var ys = Signal(function(next) {
-    sendY = next
-    if (sendX) runAsserts()
-  }, 10)
+  assert.equal(xys.value, 0, "initial value is from source#1")
 
-  var xys = merges([xs, ys])
-  assert.equal(xys.value, xs, "value is taken from first signal")
+  var client = new Client()
+  connect(xys, client)
 
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 1,
+    stopped: 0
+  }, "source#1 is in started state")
 
-  function runAsserts() {
-    sendX(1)
-    assert.deepEqual(actual, [1], "got first from x")
-    sendX(2)
-    assert.deepEqual(actual, [1, 2], "got second from x")
-    sendY(3)
-    assert.deepEqual(actual, [1, 2, 3], "got first from y")
-    sendX(4)
-    assert.deepEqual(actual, [1, 2, 3, 4], "got third from x")
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 is in started state")
 
-    sendY(5)
-    sendY(6)
-    assert.deepEqual(actual, [1, 2, 3, 4, 5, 6], "got second & third from y")
-    done()
-  }
+  assert.equal(xys.value, 0, "initial value is from source#1")
+
+  send(xs, 1)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 1,
+    started: 1,
+    stopped: 0
+  }, "source#1 value updated")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 value didn't change")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 1, "merged signal value updated")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source#1 value updated")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 value didn't change")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 2, "merged signal value updated")
+
+  send(ys, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source#1 value stayed")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+  }, "source#2 value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 3, "merged signal value updated")
+
+  send(xs, new Return(4))
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+  }, "source#1 value changed & stopped")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+  }, "source#2 value didn't change")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 4, "merged signal value updated")
+
+  send(ys, 5)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+  }, "source#1 value changed & stopped")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 5,
+    started: 1,
+    stopped: 0
+  }, "source#2 value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 5],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(xys.value, 5, "merged signal value updated")
+
+  send(ys, new Return(6))
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 1
+  }, "source#1 value changed & stopped")
+
+  assert.deepEqual(ys.toJSON(), {
+    value: 6,
+    started: 1,
+    stopped: 1
+  }, "source#2 value changed & stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 5, 6],
+    errors: [],
+    ends: [true]
+  }, "message & end received")
+
+  assert.equal(xys.value, 6, "merged signal value updated")
 }
 
 var combine = signal.combine
-exports["test synchronous combine"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(1)
-    next(2)
-    next(3)
-  }, 0)
+exports["test combine"] = function(assert) {
+  var xs = new Subject({ value: 0 })
+  var ys = new Subject({ value: 5 })
+  var client = new Client();
 
-  var ys = Signal(function(next) {
-    next(11)
-    next(12)
-    next(13)
-    next(14)
+  var xys = combine([xs, ys]);
 
-    assert.deepEqual(actual, [
-      [1, 10],
-      [2, 10],
-      [3, 10],
-      [3, 11],
-      [3, 12],
-      [3, 13],
-      [3, 14]
-    ], "signals were combined")
-    done()
-  }, 10)
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 0
+  }, "xs has not started yet")
 
-  var xys = combine([xs, ys])
-  assert.deepEqual(xys.value, [0, 10], "initial value was combined")
+  assert.deepEqual(ys.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 5
+  }, "ys has not started yet")
 
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
+  assert.deepEqual(xys.value, [0, 5], "xys.value combined")
+
+  connect(xys, client);
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 0
+  }, "xs started")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "ys started")
+
+  assert.deepEqual(xys.value, [0, 5], "xys.value didn't change")
+
+  send(xs, 1)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs.value changed to 1")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "ys value didn't change")
+
+  assert.deepEqual(xys.value, [1, 5], "xys.value changed")
+
+  send(ys, 6)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "xs.value is still 1")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 6
+  }, "ys value changed to 6")
+
+  assert.deepEqual(xys.value, [1, 6], "xys.value changed")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value changed to 2")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 6
+  }, "ys value didn't change")
+
+  assert.deepEqual(xys.value, [2, 6], "xys.value changed")
+
+  send(ys, 8)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value didn't change")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 8
+  }, "ys value changed to 8")
+
+  assert.deepEqual(xys.value, [2, 8], "xys.value changed")
+
+  send(ys, Return(5))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "xs.value didn't change")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "ys value changed to 5 & stopped")
+
+  assert.deepEqual(xys.value, [2, 5], "xys.value changed")
+
+  send(xs, 5)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "xs.value changed to 5")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "ys value didn't change")
+
+  assert.deepEqual(xys.value, [5, 5], "xys.value changed")
+
+  send(xs, Return(7))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 7
+  }, "stopped and changed xs.value to 7")
+
+  assert.deepEqual(ys.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "ys value didn't change")
+
+  assert.deepEqual(xys.value, [7, 5], "xys.value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [
+      [1, 5],
+      [1, 6],
+      [2, 6],
+      [2, 8],
+      [2, 5],
+      [5, 5],
+      [7, 5]
+    ],
+    errors: [],
+    ends: [true]
+  }, "all messages received on the client")
 }
 
-exports["test combine concurrent signals"] = function(assert, done) {
-  var sendX = null
-  var sendY = null
-  var xs = Signal(function(next) {
-    sendX = next
-    if (sendY) runAsserts()
-  }, 0)
-
-  var ys = Signal(function(next) {
-    sendY = next
-    if (sendX) runAsserts()
-  }, 10)
-
-  var xys = combine([xs, ys])
-  assert.deepEqual(xys.value, [0, 10], "initial value combined")
-
-  var actual = []
-  spawn(function(xy) {
-    actual.push(xy)
-  }, xys)
-
-  function runAsserts() {
-    sendX(1)
-    assert.deepEqual(actual, [[1, 10]],
-                     "got first from x")
-    sendX(2)
-    assert.deepEqual(actual, [[1, 10], [2, 10]],
-                     "got second from x")
-    sendY(3)
-    assert.deepEqual(actual, [[1, 10], [2, 10], [2, 3]],
-                     "got first from y")
-    sendX(4)
-    assert.deepEqual(actual, [[1, 10], [2, 10], [2, 3], [4, 3]],
-                     "got third from x")
-
-    sendY(5)
-    assert.deepEqual(actual, [[1, 10], [2, 10], [2, 3], [4, 3], [4, 5]],
-                     "got second & third from y")
-    done()
-  }
-}
 
 var count = signal.count
-exports["test count"] = function(assert, done) {
-  var input = Signal(function(next) {
-    next("a")
-    next("b")
-    next("c")
-    next("d")
+exports["test count"] = function(assert) {
+  var xs = new Subject({ value: null })
+  var ys = count(xs)
 
-    assert.deepEqual(actual, [1, 2, 3, 4], "values were indexed")
-    done()
-  }, 0)
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: null
+  }, "source is in initial state")
+  assert.equal(ys.value, 0, "counter is at 0")
 
-  var output = count(input)
-  assert.equal(output.value, 0, "initial is 0")
+  var client = new Client()
+  connect(ys, client)
 
-  var actual = []
-  spawn(function(x) {
-    actual.push(x.valueOf())
-  }, output)
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "source is in initial state")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "counter hasn't recevied anything yet")
+
+  assert.equal(ys.value, 0, "counter is at 0")
+
+  send(xs, "a")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "a"
+  }, "source vaule changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "counter received message")
+
+  assert.equal(ys.value, 1, "counter incremented")
+
+  send(xs, "b")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "b"
+  }, "source vaule changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "counter received message")
+
+  assert.equal(ys.value, 2, "counter incremented")
+
+  send(xs, "c")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "c"
+  }, "source vaule changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: []
+  }, "counter received message")
+
+  assert.equal(ys.value, 3, "counter incremented")
+
+  send(xs, new Return("d"))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: "d"
+  }, "source vaule changed & stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4],
+    errors: [],
+    ends: [true]
+  }, "counter received message & end")
+
+  assert.equal(ys.value, 4, "counter incremented")
 }
 
+
 var countIf = signal.countIf
-exports["test countIf"] = function(assert, done) {
+exports["test countIf"] = function(assert) {
   var isUpperCase = function(c) {
     return c.toUpperCase() == c
   }
 
-  var input = Signal(function(next) {
-    next("a")
-    assert.deepEqual(actual, [], "don't count a")
-    next("B")
-    assert.deepEqual(actual, [1], "count B")
-    next("C")
-    assert.deepEqual(actual, [1, 2], "count C")
-    next("d")
-    assert.deepEqual(actual, [1, 2], "don't count d")
-    next("D")
-    assert.deepEqual(actual, [1, 2, 3], "count D")
+  var xs = new Subject({ value: "B" })
+  var ys = countIf(isUpperCase, xs)
 
-    done()
-  }, "B")
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: "B"
+  }, "source is in initial state")
 
-  var output = countIf(isUpperCase, input)
-  assert.equal(output.value, 0, "initial is 0")
+  assert.equal(ys.value, 0, "counter value is at 0")
 
-  var actual = []
-  spawn(function(x) {
-    actual.push(x.valueOf())
-  }, output)
+  var client = new Client()
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "B"
+  }, "source is in start state")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages received")
+
+  assert.equal(ys.value, 0, "count is at 0")
+
+  send(xs, "a")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "a"
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages received")
+
+  assert.equal(ys.value, 0, "count is at 0")
+
+  send(xs, "B")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "B"
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(ys.value, 1, "counter incremented")
+
+  send(xs, "C")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "C"
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "message received")
+
+  assert.equal(ys.value, 2, "counter incremented")
+
+  send(xs, "d")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: "d"
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "message wasn't received")
+
+  assert.equal(ys.value, 2, "counter didn't incremented")
+
+  send(xs, new Return("D"))
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: "D"
+  }, "source value changed & stopped")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: [true]
+  }, "message & end received")
+
+  assert.equal(ys.value, 3, "counter incremented")
 }
 
 var dropRepeats = signal.dropRepeats
-exports["test dropRepeats"] = function(assert, done) {
-  var xs = Signal(function(next) {
-    next(0)
-    assert.deepEqual([], actual, "drop repeated initial")
-    next(1)
-    assert.deepEqual([1], actual, "changed to 1")
-    next(2)
-    assert.deepEqual([1, 2], actual, "changed to 2")
-    next(2)
-    assert.deepEqual([1, 2], actual, "drop repeated 2")
-    next(2)
-    assert.deepEqual([1, 2], actual, "drop repeated 2")
-    next(3)
-    assert.deepEqual([1, 2, 3], actual, "changed to 3")
-    next(3)
-    assert.deepEqual([1, 2, 3], actual, "drop repeated 3")
-    next(4)
-    assert.deepEqual([1, 2, 3, 4], actual, "changed to 4")
-    next(3)
-    assert.deepEqual([1, 2, 3, 4, 3], actual, "changed to 3")
-    next(3)
-    assert.deepEqual([1, 2, 3, 4, 3], actual, "drop repeated 3")
-    next(4)
-    assert.deepEqual([1, 2, 3, 4, 3, 4], actual, "changed to 4")
-    next(3)
-    assert.deepEqual([1, 2, 3, 4, 3, 4, 3], actual, "changed to 3")
-    done()
-  }, 0)
+exports["test dropRepeats"] = function(assert) {
+  var xs = new Subject({ value: 0 })
+  var ys = dropRepeats(xs)
 
-  var output = dropRepeats(xs)
-  assert.equal(output.value, 0, "initial value is kept")
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 0,
+    stopped: 0
+  }, "source in initial state")
 
-  var actual = []
-  spawn(function(x) {
-    actual.push(x.valueOf())
-  }, output)
+  assert.equal(ys.value, 0, "filter is in initial state")
+
+  var client = new Client()
+  connect(ys, client)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 1,
+    stopped: 0
+  }, "source started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages recevied")
+
+  assert.equal(ys.value, 0, "filter is in initial state")
+
+  send(xs, 0)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 0,
+    started: 1,
+    stopped: 0
+  }, "source started")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [],
+    errors: [],
+    ends: []
+  }, "no messages recevied")
+
+  assert.equal(ys.value, 0, "filter is in initial state")
+
+  send(xs, 1)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 1,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1],
+    errors: [],
+    ends: []
+  }, "messages recevied")
+
+  assert.equal(ys.value, 1, "filter value changed")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "messages recevied")
+
+  assert.equal(ys.value, 2, "filter value changed")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "messages isn't recevied")
+
+  assert.equal(ys.value, 2, "filter value didn't changed")
+
+  send(xs, 2)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 2,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2],
+    errors: [],
+    ends: []
+  }, "messages isn't recevied")
+
+  assert.equal(ys.value, 2, "filter value didn't changed")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: []
+  }, "messages recevied")
+
+  assert.equal(ys.value, 3, "filter value changed")
+
+  send(xs, 3)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3],
+    errors: [],
+    ends: []
+  }, "messages isn't received")
+
+  assert.equal(ys.value, 3, "filter value didn't change")
+
+  send(xs, 4)
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 4,
+    started: 1,
+    stopped: 0
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4],
+    errors: [],
+    ends: []
+  }, "messages recevied")
+
+  assert.equal(ys.value, 4, "filter value changed")
+
+  send(xs, new Return(3))
+
+  assert.deepEqual(xs.toJSON(), {
+    value: 3,
+    started: 1,
+    stopped: 1
+  }, "source value changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 3],
+    errors: [],
+    ends: [true]
+  }, "messages recevied")
+
+  assert.equal(ys.value, 3, "filter value changed")
 }
 
 var keepWhen = signal.keepWhen
-exports["test keepWhen"] = function(assert, done) {
-  var setState = null
-  var setX = null
-  var state = new Signal(function(next) {
-    setState = next
-    if (setX) runAsserts()
-  }, false)
-  var xs = new Signal(function(next) {
-    setX = next
-    if (setState) runAsserts()
-  }, 0)
+exports["test keepWhen"] = function(assert) {
+  var setState = function(x) { send(state, x) }
+  var setX = function(x) { send(xs, x) }
+
+  var state = new Subject({ value: false })
+  var xs = new Subject({ value: 0 })
+
   var ys = keepWhen(state, 10, xs)
 
-  assert.equal(ys.value, 10, "inital value set")
-  var actual = []
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
+  assert.deepEqual(state.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: false
+  }, "state in initial state")
 
-  function runAsserts() {
-    setX(1)
-    assert.equal(ys.value, 10, "inital value kept")
-    assert.deepEqual(actual, [], "not kept until true")
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 0
+  }, "source is in initial state")
 
-    setX(2)
-    assert.equal(ys.value, 10, "inital value kept")
-    assert.deepEqual(actual, [], "not kept until true")
+  assert.equal(ys.value, 10, "filter set in inital state")
 
-    setState(true)
-    assert.equal(ys.value, 2, "last value set")
-    assert.deepEqual(actual, [2], "not kept until true")
+  var client = new Client()
+  connect(ys, client)
+  setX(1)
 
-    setX(3)
-    assert.equal(ys.value, 3, "value propagated")
-    assert.deepEqual(actual, [2, 3], "new value collected")
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state in initial state")
 
-    setX(3)
-    assert.equal(ys.value, 3, "value propagated")
-    assert.deepEqual(actual, [2, 3, 3], "new value collected")
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "source value changed")
 
-    setState(false)
-    assert.equal(ys.value, 3, "value didn't change")
-    assert.deepEqual(actual, [2, 3, 3], "no changes to ys")
+  assert.equal(ys.value, 10, "filter didn't change")
 
-    setX(4)
-    assert.equal(ys.value, 3, "value not propagated")
-    assert.deepEqual(actual, [2, 3, 3], "value isn't collected")
+  setX(2)
 
-    setState(false)
-    assert.equal(ys.value, 3, "value didn't change")
-    assert.deepEqual(actual, [2, 3, 3], "no changes to ys")
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state in initial state")
 
-    setState(true)
-    assert.equal(ys.value, 4, "value didn't change")
-    assert.deepEqual(actual, [2, 3, 3, 4], "no changes to ys")
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source value changed")
 
-    setState(false)
-    assert.equal(ys.value, 4, "value didn't change")
-    assert.deepEqual(actual, [2, 3, 3, 4], "no changes to ys")
+  assert.equal(ys.value, 10, "filter didn't change")
 
-    setState(true)
-    assert.equal(ys.value, 4, "value changed")
-    assert.deepEqual(actual, [2, 3, 3, 4, 4],
-                     "state chnages propagate same value")
+  setState(true)
 
-    done()
-  }
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state in initial state")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source value didn't change")
+
+  assert.equal(ys.value, 2, "filter changed")
+
+
+  setX(3)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state in initial state")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value changed")
+
+  assert.equal(ys.value, 3, "filter value changed")
+
+  setX(3)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state is on")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value changed")
+
+  assert.equal(ys.value, 3, "filter changed")
+
+  setState(false)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value didn't change")
+
+  assert.equal(ys.value, 3, "filter didn't change")
+
+  setX(4)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value changed")
+
+  assert.equal(ys.value, 3, "filter didn't changed")
+
+  setState(false)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value changed")
+
+  assert.equal(ys.value, 3, "filter changed")
+
+  setState(true)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state is on")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value didn't changed")
+
+  assert.equal(ys.value, 4, "filter changed")
+
+  setState(false)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value didn't changed")
+
+  assert.equal(ys.value, 4, "filter didn't changed")
+
+  setState(new Return(true))
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: true
+  }, "state is on & stopped")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value didn't changed")
+
+  assert.equal(ys.value, 4, "filter changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2, 3, 3, 4, 4],
+    errors: [],
+    ends: []
+  }, "received all the messages")
+
+  setX(5)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: true
+  }, "state is on & stopped")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "source value changed")
+
+  assert.equal(ys.value, 5, "filter changed")
+
+  setX(Return(5))
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: true
+  }, "state is on & stopped")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 5
+  }, "source value changed & stopped")
+
+  assert.equal(ys.value, 5, "filter changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [2, 3, 3, 4, 4, 5, 5],
+    errors: [],
+    ends: [true]
+  }, "received all the messages & end")
 }
 
 var dropWhen = signal.dropWhen
-exports["test dropWhen"] = function(assert, done) {
-  var setState = null
-  var setX = null
-  var state = new Signal(function(next) {
-    setState = next
-    if (setX) runAsserts()
-  }, false)
-  var xs = new Signal(function(next) {
-    setX = next
-    if (setState) runAsserts()
-  }, 0)
+exports["test dropWhen"] = function(assert) {
+  var setState = function(x) { send(state, x) }
+  var setX = function(x) { send(xs, x) }
+
+  var state = new Subject({ value: false })
+  var xs = new Subject({ value: 0 })
+
   var ys = dropWhen(state, 10, xs)
 
-  assert.equal(ys.value, 0, "inital value kept")
-  var actual = []
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
+  assert.deepEqual(state.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: false
+  }, "state in initial state")
 
-  function runAsserts() {
-    setX(1)
-    assert.equal(ys.value, 1, "value 1 propagated")
-    assert.deepEqual(actual, [1], "new value 1 is collected")
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 0
+  }, "source is in initial state")
 
-    setX(2)
-    assert.equal(ys.value, 2, "value 2 propagated")
-    assert.deepEqual(actual, [1, 2], "new value 2 collected")
+  assert.equal(ys.value, 0, "filter inherts value as state is false")
 
-    setState(true)
-    assert.equal(ys.value, 2, "last value 2 is kept")
-    assert.deepEqual(actual, [1, 2], "nothing propagated")
+  var client = new Client()
+  connect(ys, client)
+  setX(1)
 
-    setX(3)
-    assert.equal(ys.value, 2, "value 3 isn't propagated")
-    assert.deepEqual(actual, [1, 2], "value 3 isn't collected")
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state in initial state")
 
-    setX(3)
-    assert.equal(ys.value, 2, "value 3 isn't propagated")
-    assert.deepEqual(actual, [1, 2], "value 3 isn't collected")
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "source value changed")
 
-    setState(false)
-    assert.equal(ys.value, 3, "last value 3 is set")
-    assert.deepEqual(actual, [1, 2, 3], "last value 3 is collected")
+  assert.equal(ys.value, 1, "filter changed")
 
-    setX(4)
-    assert.equal(ys.value, 4, "value changed to 4")
-    assert.deepEqual(actual, [1, 2, 3, 4], "value 4 is collected")
+  setX(2)
 
-    setState(false)
-    assert.equal(ys.value, 4, "value 4 is preserved")
-    assert.deepEqual(actual, [1, 2, 3, 4], "last value 4 isn't collected")
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state in initial state")
 
-    setState(true)
-    assert.equal(ys.value, 4, "value didn't change")
-    assert.deepEqual(actual, [1, 2, 3, 4], "no changes collected")
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source value changed")
 
-    setState(false)
-    assert.equal(ys.value, 4, "value didn't change")
-    assert.deepEqual(actual, [1, 2, 3, 4, 4], "last value 4 is collected")
+  assert.equal(ys.value, 2, "filter chnaged")
 
-    setState(true)
-    assert.equal(ys.value, 4, "no changes")
-    assert.deepEqual(actual, [1, 2, 3, 4, 4], "no changes collected")
+  setState(true)
 
-    done()
-  }
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state signal changed")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source value didn't change")
+
+  assert.equal(ys.value, 2, "filter didn't change")
+
+
+  setX(3)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state is true")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value changed")
+
+  assert.equal(ys.value, 2, "filter didn't changed")
+
+  setX(3)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state is on")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value changed")
+
+  assert.equal(ys.value, 2, "filter didn't change")
+
+  setState(false)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value didn't change")
+
+  assert.equal(ys.value, 3, "filter changed")
+
+  setX(4)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value changed")
+
+  assert.equal(ys.value, 4, "filter changed")
+
+  setState(false)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value changed")
+
+  assert.equal(ys.value, 4, "filter changed")
+
+  setState(true)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: true
+  }, "state is on")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value didn't changed")
+
+  assert.equal(ys.value, 4, "filter didn't change")
+
+  setState(false)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: false
+  }, "state is off")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value didn't changed")
+
+  assert.equal(ys.value, 4, "filter changed")
+
+  setState(new Return(true))
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: true
+  }, "state is on & stopped")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 4
+  }, "source value didn't changed")
+
+  assert.equal(ys.value, 4, "filter didn't changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 4],
+    errors: [],
+    ends: []
+  }, "received all the messages & end")
+
+  setX(5)
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: true
+  }, "state is on & stopped")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 5
+  }, "source value changed")
+
+  assert.equal(ys.value, 4, "filter didn't changed")
+
+  setX(new Return(6))
+
+  assert.deepEqual(state.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: true
+  }, "state is on & stopped")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 6
+  }, "source value changed & source stopped")
+
+  assert.equal(ys.value, 4, "filter didn't changed")
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [1, 2, 3, 4, 4],
+    errors: [],
+    ends: [true]
+  }, "received all the messages & end")
 }
+
 
 var sampleOn = signal.sampleOn
-exports["test sampleOn"] = function(assert, done) {
-  var setX = null
-  var xs = new Signal(function(next) {
-    setX = next
-    if (tick) runAsserts()
-  }, 0)
-
-  var tick = null
-  var ticks = new Signal(function(next) {
-    tick = next
-    if (setX) runAsserts()
-  })
-
+exports["test sampleOn"] = function(assert) {
+  var ticks = new Subject({ value: null })
+  var xs = new Subject({ value: 0 })
   var ys = sampleOn(ticks, xs)
-  var actual = []
-  spawn(function(y) {
-    actual.push(y)
-  }, ys)
 
-  function runAsserts() {
-    assert.equal(ys.value, 0, "initial value is copied from xs")
-    tick()
-    assert.equal(ys.value, 0, "value is 0")
-    assert.deepEqual(actual, [0], "value propagated")
+  assert.deepEqual(ticks.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: null
+  }, "ticks is in initial state")
 
-    tick()
-    assert.equal(ys.value, 0, "value is 0")
-    assert.deepEqual(actual, [0, 0], "value propagated")
+  assert.deepEqual(xs.toJSON(), {
+    started: 0,
+    stopped: 0,
+    value: 0
+  }, "source is in initial state")
 
-    setX(1)
-    assert.equal(ys.value, 0, "value is still 0")
-    assert.deepEqual(actual, [0, 0], "value not propagated")
+  assert.deepEqual(ys.value, 0, "sampler inherits initial value from source")
 
-    setX(2)
-    assert.equal(ys.value, 0, "value is still 0")
-    assert.deepEqual(actual, [0, 0], "value not propagated")
+  var client = new Client()
 
-    tick()
-    assert.equal(ys.value, 2, "value is 2")
-    assert.deepEqual(actual, [0, 0, 2], "value is propagated")
+  connect(ys, client)
 
-    done()
-  }
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "ticks started")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 0
+  }, "source started")
+
+  assert.deepEqual(ys.value, 0, "sampler value didn't change")
+
+  send(ticks, null)
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0],
+    errors: [],
+    ends: []
+  }, "client received message")
+
+  send(xs, 2)
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "ticks didn't change")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "source value changed")
+
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0],
+    errors: [],
+    ends: []
+  }, "client didn't receive message")
+
+  send(xs, 3)
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: null
+  }, "ticks didn't change")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value changed")
+
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0],
+    errors: [],
+    ends: []
+  }, "client didn't received a message")
+
+  send(ticks, 1)
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "ticks changed")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 3
+  }, "source value didn't changed")
+
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0, 3],
+    errors: [],
+    ends: []
+  }, "client received a message")
+
+  send(xs, new Return(4))
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 1
+  }, "ticks didn't change")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "source value changed & stopped")
+
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0, 3],
+    errors: [],
+    ends: []
+  }, "client didn't received message")
+
+  send(ticks, 2)
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 0,
+    value: 2
+  }, "ticks didn't change")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "source value didn't change")
+
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0, 3, 4],
+    errors: [],
+    ends: []
+  }, "client received message")
+
+  send(ticks, new Return(3))
+
+  assert.deepEqual(ticks.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 3
+  }, "ticks changed")
+
+  assert.deepEqual(xs.toJSON(), {
+    started: 1,
+    stopped: 1,
+    value: 4
+  }, "source value didn't change")
+
+
+  assert.deepEqual(client.toJSON(), {
+    messages: [0, 3, 4, 4],
+    errors: [],
+    ends: [true]
+  }, "client received message and ended")
 }
-*/
