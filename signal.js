@@ -27,6 +27,7 @@ var $end = "end@signal"
 var $start = "start@signal"
 var $stop = "stop@signal"
 var $state = "state@signal"
+var $pending = "pending@signal"
 
 function outputs(input) { return input[$outputs] }
 outputs.toString = function() { return $outputs }
@@ -263,6 +264,7 @@ exports.constant = constant
 function Merge(inputs) {
   this[$outputs] = []
   this[$sources] = inputs
+  this[$pending] = inputs.length
   this.value = inputs[0].value
 }
 Merge.start = function(input) {
@@ -290,8 +292,11 @@ Merge.end = function(input, source) {
   var sources = input[$sources]
   var id = sources.indexOf(source)
   if (id >= 0) {
-    sources.splice(id, 1)
-    if (sources.length === 0)
+    var pending = input[$pending] - 1
+    input[$pending] = pending
+    source[$disconnect](source, input)
+
+    if (pending === 0)
       Input.end(input)
   }
 }
@@ -375,6 +380,7 @@ function LiftN(step, inputs) {
   this.step = step
   this[$outputs] = []
   this[$sources] = inputs
+  this[$pending] = inputs.length
   this[$state] = params
   this.value = value
 }
