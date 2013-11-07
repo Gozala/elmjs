@@ -519,7 +519,7 @@ function skipIfTrue(isTrue, x) { return isTrue ? Skip : x }
 function skipIfFalse(isTrue, x) { return isTrue ? x : Skip }
 
 function keepWhen(state, x, xs) {
-  var input = lift(skipIfFalse, state, xs)
+  var input = lift(skipIfFalse, dropRepeats(state), xs)
   return dropIf(isSkip, x, input)
 }
 exports.keepWhen = keepWhen
@@ -532,7 +532,7 @@ exports.keepWhen = keepWhen
 
 // Signal Bool -> x -> Signal x -> Signal x
 function dropWhen(state, x, xs) {
-  var input = lift(skipIfTrue, state, xs)
+  var input = lift(skipIfTrue, dropRepeats(state), xs)
   return dropIf(isSkip, x, input)
 }
 exports.dropWhen = dropWhen
