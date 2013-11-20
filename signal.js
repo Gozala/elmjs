@@ -408,6 +408,13 @@ var slicer = [].slice
 // Transform given signal(s) with a given `step` function.
 
 // (x -> y -> ...) -> Signal x -> Signal y -> ... -> Signal z
+//
+// xs              :--x-----x-----x---
+// lift(f, xs)     :--f(x)--f(x)--f(x)
+//
+// xs              :--x--------------------------x-------
+// ys              :-----------y---------y---------------
+// lift(f, xs, ys) :--f(x, y)--f(x, y)--f(x, y)--f(x, y)-
 function lift(step, xs, ys) {
   return ys ? new LiftN(step, slicer.call(arguments, 1)) :
          new Lift(step, xs)
@@ -434,6 +441,9 @@ exports.combine = combine
 // Count the number of events that have occured.
 
 // Signal x -> Signal Int
+//
+// xs       :  --x--x----x--x------x
+// count(xs):  --1--2----3--4------5
 function count(xs) {
   return foldp(function(x, y) {
     return x + 1
